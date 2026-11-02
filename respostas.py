@@ -1,14 +1,20 @@
-"""5) Sugestões de resposta: você cola no Telegram o link de um post do X, o Claude escreve 3 respostas
-na sua voz e cada uma vira um botão "Abrir no X", que abre o app com a resposta já escrita.
+"""5) Sugestões de resposta em português: o Claude escreve 3 respostas na sua voz e cada uma vira um
+botão "Abrir no X", que abre o app com a resposta já escrita.
 
-O webhook só registra o pedido (bot_estado, chave pedido_resposta:<tweet_id>). Este script roda no
-GitHub Actions, onde o Claude está disponível pela assinatura. `--checar` só diz se há pedidos,
-para o workflow não instalar o Claude à toa.
+Dois caminhos:
+- você cola no Telegram o link de um post: o webhook registra o pedido (bot_estado, chave
+  pedido_resposta:<tweet_id>) e este script responde na rodada seguinte;
+- `--descobrir`: busca os posts recentes de maior engajamento dos perfis em perfis_resposta.txt e
+  sugere respostas para os melhores, antes dos horários de pico.
+
+Roda no GitHub Actions, onde o Claude está disponível pela assinatura. `--checar` só diz se há
+pedidos, para o workflow não instalar o Claude à toa.
 """
-import json
 import os
 import re
 import sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from urllib.parse import quote
 
 import tweepy
@@ -18,6 +24,9 @@ from gerador import LIMITE_TWEET, VOZ, claude_json
 from publicador import cliente_x
 from telegram_bot import CHAT_ID, tg
 
+PERFIS = Path(__file__).with_name("perfis_resposta.txt")
+SUGESTOES_POR_RODADA = int(os.getenv("SUGESTOES_POR_RODADA", "3"))
+JANELA = timedelta(hours=6)
 LINK_POST = re.compile(r"(?:x|twitter)\.com/([A-Za-z0-9_]+)/status/(\d+)")
 
 SCHEMA = {
@@ -61,7 +70,7 @@ def sistema() -> str:
         "Rules for every reply:\n"
         "- Write exactly 3 replies, each with a different angle: an insight or LATAM perspective, a "
         "respectful counterpoint, and a sharp question that invites the author to answer.\n"
-        "- Same language as the original post (Portuguese, Spanish or English).\n"
+        "- Always in Brazilian Portuguese, whatever the language of the original post.\n"
         f"- At most {LIMITE_TWEET - 20} characters each. No links, no hashtags, at most one emoji.\n"
         "- Use only facts stated in the post. Never bring outside numbers, names or events: offer "
         "opinion and angle instead.\n"
@@ -83,7 +92,10 @@ def responder(db, tweet_id: str, autor_link: str):
     autor = (resp.includes or {}).get("users", [None])[0]
     usuario = autor.username if autor else autor_link
     texto = (resp.data.data.get("note_tweet") or {}).get("text") or resp.data.text
+    sugerir(tweet_id, usuario, texto)
 
+
+def sugerir(tweet_id: str, usuario: str, texto: str, contexto: str = ""):
     saida = claude_json(f"Post by @{usuario}:\n\"\"\"\n{texto}\n\"\"\"\n\nWrite the 3 replies.", sistema(), SCHEMA)
     opcoes = [o for o in (saida or {}).get("respostas", []) if len(o["texto"]) <= LIMITE_TWEET][:3]
     if not opcoes:
@@ -91,7 +103,7 @@ def responder(db, tweet_id: str, autor_link: str):
         return
 
     resumo = texto if len(texto) <= 200 else texto[:200] + "…"
-    linhas = [f"💬 Respostas para @{usuario}:\n\"{resumo}\"\n"]
+    linhas = [f"💬 Respostas para @{usuario}{contexto}:\n\"{resumo}\"\n"]
     for i, o in enumerate(opcoes, 1):
         linhas.append(f"{i}️⃣ {o['angulo']}\n{o['texto']}\n")
     linhas.append("Toque num botão: o X abre com a resposta escrita, é só revisar e responder.")
@@ -103,8 +115,72 @@ def responder(db, tweet_id: str, autor_link: str):
        reply_markup={"inline_keyboard": teclado}, disable_web_page_preview=True)
 
 
+def perfis() -> list[str]:
+    linhas = PERFIS.read_text(encoding="utf-8").splitlines() if PERFIS.exists() else []
+    return [l.split("#")[0].strip().lstrip("@") for l in linhas if l.split("#")[0].strip()]
+
+
+def descobrir(db):
+    """Posts recentes com mais engajamento dos perfis da lista, ainda sem sugestão."""
+    usuarios = perfis()
+    if not usuarios:
+        return
+    # A busca aceita até 512 caracteres por consulta: divide a lista em blocos.
+    blocos, atual = [], []
+    for u in usuarios:
+        if len(" OR ".join(f"from:{x}" for x in atual + [u])) > 440:
+            blocos.append(atual)
+            atual = []
+        atual.append(u)
+    blocos.append(atual)
+
+    x = cliente_x()
+    inicio = datetime.now(timezone.utc) - JANELA
+    candidatos = []
+    for bloco in blocos:
+        consulta = f"({' OR '.join(f'from:{u}' for u in bloco)}) -is:retweet -is:reply"
+        try:
+            resp = x.search_recent_tweets(
+                consulta, max_results=10, start_time=inicio, user_auth=True, sort_order="relevancy",
+                tweet_fields=["public_metrics", "note_tweet", "author_id"],
+                expansions=["author_id"], user_fields=["username"],
+            )
+        except tweepy.TweepyException as e:
+            print(f"[respostas] busca falhou: {e}")
+            continue
+        nomes = {u.id: u.username for u in (resp.includes or {}).get("users", [])}
+        for post in resp.data or []:
+            m = post.public_metrics
+            candidatos.append({
+                "id": str(post.id), "usuario": nomes.get(post.author_id, "?"),
+                "texto": (post.data.get("note_tweet") or {}).get("text") or post.text,
+                "pontos": m["like_count"] + 2 * m["retweet_count"] + 3 * m["reply_count"] + 2 * m["quote_count"],
+            })
+
+    ja = {l["chave"].split(":", 1)[1] for l in
+          db.table("bot_estado").select("chave").like("chave", "sugerido:%").execute().data}
+    escolhidos = []
+    for c in sorted(candidatos, key=lambda c: -c["pontos"]):
+        # Um post por perfil por rodada, para variar.
+        if c["id"] in ja or any(e["usuario"] == c["usuario"] for e in escolhidos):
+            continue
+        escolhidos.append(c)
+        if len(escolhidos) == SUGESTOES_POR_RODADA:
+            break
+    print(f"[respostas] {len(candidatos)} posts lidos, {len(escolhidos)} escolhidos")
+    for c in escolhidos:
+        db.table("bot_estado").upsert({"chave": f"sugerido:{c['id']}", "valor": c["usuario"]}).execute()
+        try:
+            sugerir(c["id"], c["usuario"], c["texto"], contexto=f" ({c['pontos']} interações)")
+        except Exception as e:
+            print(f"[respostas] falha em {c['id']}: {e}")
+
+
 def main():
     db = supabase()
+    if "--descobrir" in sys.argv:
+        descobrir(db)
+        return
     pendentes = pedidos(db)
     if "--checar" in sys.argv:
         saida = os.getenv("GITHUB_OUTPUT")
