@@ -17,6 +17,8 @@ from midia import buscar_gif, grafico, imagem_da_materia, logos_do_x, salvar_pub
 MODELO = "claude-opus-5-5"
 LIMITE_TWEET = 280
 POR_EXECUCAO = int(os.getenv("RASCUNHOS_POR_EXECUCAO", "5"))
+# Notícias repetidas ou fora do tema são puladas: segue descendo a lista até este limite de chamadas.
+MAX_TENTATIVAS = int(os.getenv("MAX_TENTATIVAS", "15"))
 VOZ = Path(__file__).with_name("voz.md")
 REFERENCIA = Path(__file__).with_name("referencia.md")
 
@@ -179,7 +181,7 @@ def main():
     db = supabase()
     fontes = (
         db.table("fontes").select("*").eq("usado", False)
-        .order("publicado_em", desc=True).limit(POR_EXECUCAO).execute().data
+        .order("publicado_em", desc=True).limit(MAX_TENTATIVAS).execute().data
     )
     if not fontes:
         print("[gerador] nenhuma fonte nova")
@@ -193,7 +195,10 @@ def main():
         r["texto"] for r in
         reversed(db.table("rascunhos").select("texto").order("id", desc=True).limit(25).execute().data)
     ]
+    criados = 0
     for fonte in fontes:
+        if criados >= POR_EXECUCAO:
+            break
         formato = proximo_formato(recentes)
         try:
             saida = gerar_um(fonte, formato, ja_cobertos)
@@ -215,6 +220,7 @@ def main():
         midia_tipo, midia_urls = resolver_midia(fonte, formato, saida)
         recentes.append(formato_de(midia_tipo))
         ja_cobertos.append(tweet)
+        criados += 1
         db.table("rascunhos").insert({
             "fonte_id": fonte["id"],
             "texto": tweet,
