@@ -35,6 +35,9 @@ class handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         db = supabase()
+        # Batimento: mostra no banco quando o relógio chamou pela última vez.
+        db.table("bot_estado").upsert({"chave": "tick:ultimo",
+                                       "valor": datetime.now(timezone.utc).isoformat()}).execute()
         feito = []
         publicador.main()
         enviar_pendentes(db)
