@@ -85,24 +85,11 @@ def repetido_assunto(db, message_id: int, i: int) -> bool:
 
 
 def mostrar_atualidades(db):
-    from respostas import noticias_do_momento
-    try:
-        assuntos = noticias_do_momento()[:10]
-    except Exception as e:
-        tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Não consegui buscar as notícias do momento: {e}")
-        return
-    if not assuntos:
-        tg("sendMessage", chat_id=CHAT_ID, text="Nenhuma notícia em alta agora.")
-        return
-    db.table("bot_estado").upsert({"chave": "atualidades", "valor": json.dumps(assuntos, ensure_ascii=False)}).execute()
-    icones = {"News": "📰", "Sports": "⚽", "Entertainment": "🎬", "Business": "💼", "Technology": "💻"}
-    linhas = ["📰 Notícias do momento no X:\n"]
-    for i, a in enumerate(assuntos):
-        linhas.append(f"{i + 1}. {icones.get(a.get('category'), '•')} {a['name']}")
-    linhas.append("\nToque no número para eu escrever um rascunho sobre a notícia.")
-    botoes = [{"text": str(i + 1), "callback_data": f"alta:{i}"} for i in range(len(assuntos))]
-    teclado = [botoes[i:i + 5] for i in range(0, len(botoes), 5)]
-    tg("sendMessage", chat_id=CHAT_ID, text="\n".join(linhas), reply_markup={"inline_keyboard": teclado})
+    """Pede ao GitHub (onde está o Claude) a lista de assuntos do momento no Brasil."""
+    db.table("bot_estado").upsert({"chave": "pedido_atualidades", "valor": "1"}).execute()
+    disparar("respostas.yml")
+    tg("sendMessage", chat_id=CHAT_ID,
+       text="⏳ Montando os assuntos do momento no Brasil. A lista chega em 2 a 3 minutos.")
 
 
 def confirmar(message_id: int, texto: str):
@@ -171,7 +158,7 @@ def salvar_offset(db, offset: int):
 AVISO_PEDIDO = "⏳ Recebi o link. As 3 opções de resposta chegam aqui em alguns minutos."
 AJUDA = ("Comandos:\n"
          "• /gerar: busca notícias e gera rascunhos agora\n"
-         "• /atualidades: notícias do momento no X, para tweetar sobre elas\n"
+         "• /atualidades: assuntos do momento no Brasil, para tweetar sobre eles\n"
          "• Escreva o que quer tweetar (ex.: \"tweet sobre o hack do Mercado Bitcoin e a confiança nas "
          "exchanges brasileiras\") e eu faço o rascunho\n"
          "• Cole o link de um post do X para receber 3 sugestões de resposta\n"

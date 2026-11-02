@@ -68,56 +68,45 @@ def pedidos_de_tweet(db) -> list[dict]:
     return db.table("bot_estado").select("*").like("chave", "pedido_tweet:%").execute().data
 
 
-def assuntos_em_alta() -> list[dict]:
-    """Assuntos em alta personalizados da sua conta no X (no seu nicho, não o Brasil em geral)."""
-    import requests
-    from requests_oauthlib import OAuth1
-
-    from config import env
-    auth = OAuth1(env("X_API_KEY"), env("X_API_SECRET"), env("X_ACCESS_TOKEN"), env("X_ACCESS_TOKEN_SECRET"))
-    r = requests.get("https://api.x.com/2/users/personalized_trends", auth=auth, timeout=30)
-    r.raise_for_status()
-    return r.json().get("data", [])
-
-
-# Temas buscados nas notícias do X para o /atualidades (cada notícia lida tem custo na API).
-TEMAS_NOTICIAS = ["Brazil", "Wall Street stocks", "bitcoin"]
-
-
-def noticias_do_momento() -> list[dict]:
-    """Notícias do momento no X (aba Notícias), com título e resumo. Notícias primeiro, mais recentes antes."""
-    import requests
-    from requests_oauthlib import OAuth1
-
-    from config import env
-    auth = OAuth1(env("X_API_KEY"), env("X_API_SECRET"), env("X_ACCESS_TOKEN"), env("X_ACCESS_TOKEN_SECRET"))
-    vistas, por_tema = set(), []
-    for tema in TEMAS_NOTICIAS:
-        noticias = []
-        r = requests.get("https://api.x.com/2/news/search", auth=auth, timeout=30, params={
-            "query": tema, "max_age_hours": 18, "max_results": 6,
-            "news.fields": "name,summary,hook,category,updated_at"})
-        if not r.ok:
-            print(f"[respostas] notícias de '{tema}' falharam: {r.status_code} {r.text[:200]}")
-            continue
-        for n in r.json().get("data", []):
-            if n.get("name") and n["name"] not in vistas:
-                vistas.add(n["name"])
-                noticias.append({k: n.get(k) for k in ("name", "summary", "hook", "category", "updated_at")})
-        # Principalmente notícias: esporte e entretenimento só no fim da fila de cada tema.
-        noticias.sort(key=lambda n: n.get("updated_at") or "", reverse=True)
-        noticias.sort(key=lambda n: n.get("category") != "News")
-        por_tema.append(noticias)
-    # Intercala os temas (Brasil, mercado, cripto) para nenhum ocupar a lista inteira.
-    intercaladas = []
-    for rodada in range(max((len(t) for t in por_tema), default=0)):
-        intercaladas += [t[rodada] for t in por_tema if rodada < len(t)]
-    return intercaladas
-
-
 PALAVRAS_VAZIAS = {"the", "a", "an", "of", "in", "on", "to", "for", "and", "as", "from", "with", "by", "at",
                    "o", "a", "os", "as", "de", "do", "da", "dos", "das", "em", "no", "na", "e", "para", "com",
                    "after", "over", "since", "amid", "its", "is", "are", "across"}
+
+
+def posts_em_portugues(consulta: str) -> list[str]:
+    """Até 10 posts recentes e relevantes em português sobre o assunto: a conversa no X Brasil."""
+    try:
+        resp = cliente_x().search_recent_tweets(
+            f"{consulta} lang:pt -is:retweet -is:reply", max_results=10, sort_order="relevancy",
+            user_auth=True, tweet_fields=["note_tweet"])
+    except tweepy.TweepyException as e:
+        print(f"[respostas] busca em português falhou: {e}")
+        return []
+    return [(p.data.get("note_tweet") or {}).get("text") or p.text for p in resp.data or []]
+
+
+def montar_atualidades(db):
+    from pauta import assuntos_agrupados
+
+    if not db.table("bot_estado").select("chave").eq("chave", "pedido_atualidades").execute().data:
+        return
+    db.table("bot_estado").delete().eq("chave", "pedido_atualidades").execute()
+    try:
+        assuntos = assuntos_agrupados()
+    except Exception as e:
+        tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Não consegui montar os assuntos do momento: {e}")
+        return
+    if not assuntos:
+        tg("sendMessage", chat_id=CHAT_ID, text="Não achei assuntos fortes nas últimas horas.")
+        return
+    db.table("bot_estado").upsert({"chave": "atualidades", "valor": json.dumps(assuntos, ensure_ascii=False)}).execute()
+    linhas = ["📰 Assuntos do momento no Brasil:\n"]
+    for i, a in enumerate(assuntos):
+        linhas.append(f"{i + 1}. {a['name']} ({a['portais']} portais)\n   {a['summary']}")
+    linhas.append("\nToque no número para eu escrever um rascunho. Leio também o que estão postando no X sobre o tema.")
+    botoes = [{"text": str(i + 1), "callback_data": f"alta:{i}"} for i in range(len(assuntos))]
+    tg("sendMessage", chat_id=CHAT_ID, text="\n".join(linhas),
+       reply_markup={"inline_keyboard": [botoes[i:i + 5] for i in range(0, len(botoes), 5)]})
 
 
 def posts_sobre(assunto: str) -> list[str]:
@@ -139,9 +128,10 @@ def posts_sobre(assunto: str) -> list[str]:
     return []
 
 
-def gerar_e_avisar(db, gerar_pedido, enviar_pendentes, instrucao: str, assunto: str) -> bool:
+def gerar_e_avisar(db, gerar_pedido, enviar_pendentes, instrucao: str, assunto: str,
+                   origem: str = "em alta no X") -> bool:
     try:
-        if gerar_pedido(db, instrucao, origem=f"em alta no X: {assunto}"):
+        if gerar_pedido(db, instrucao, origem=f"{origem}: {assunto}"):
             tg("sendMessage", chat_id=CHAT_ID, text=f"✅ Pronto o rascunho sobre \"{assunto}\" 👇")
             enviar_pendentes(db)
             return True
@@ -162,6 +152,18 @@ def atender_assuntos(db):
         except ValueError:
             noticia = {"name": p["valor"]}
         assunto = noticia["name"]
+        if noticia.get("fontes"):
+            # Assunto do Brasil: manchetes dos portais são os fatos; os posts no X dão o tom da conversa.
+            posts = posts_em_portugues(noticia.get("busca_x") or assunto)
+            conversa = "\n---\n".join(t[:400] for t in posts) or "(nenhum post encontrado)"
+            instrucao = (
+                f"Tweet sobre este assunto do momento no Brasil: \"{assunto}\".\n"
+                "Facts come ONLY from these news headlines and summaries:\n"
+                f"{noticia['fontes']}\n\n"
+                "What people are posting about it on X right now (for tone and angle, not as a source of "
+                f"facts):\n{conversa}")
+            gerar_e_avisar(db, gerar_pedido, enviar_pendentes, instrucao, assunto, origem="assunto do momento")
+            continue
         if noticia.get("summary"):
             # Notícia do X: o resumo já é a fonte, sem gastar leitura de posts.
             instrucao = (
@@ -335,13 +337,14 @@ def main():
     pendentes = pedidos(db)
     if "--checar" in sys.argv:
         tem = bool(pendentes or pedidos_de_tweet(db) or
-                   db.table("bot_estado").select("chave").like("chave", "pedido_alta:%").execute().data)
+                   db.table("bot_estado").select("chave").like("chave", "pedido_a%").execute().data)
         saida = os.getenv("GITHUB_OUTPUT")
         if saida:
             with open(saida, "a") as f:
                 f.write(f"tem={'1' if tem else '0'}\n")
         print(f"[respostas] há pedidos: {tem}")
         return
+    montar_atualidades(db)
     atender_assuntos(db)
     atender_pedidos_de_tweet(db)
     for tweet_id in pendentes:
