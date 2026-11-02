@@ -85,22 +85,21 @@ def repetido_assunto(db, message_id: int, i: int) -> bool:
 
 
 def mostrar_atualidades(db):
-    from respostas import assuntos_em_alta
+    from respostas import noticias_do_momento
     try:
-        assuntos = assuntos_em_alta()[:10]
+        assuntos = noticias_do_momento()[:10]
     except Exception as e:
-        tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Não consegui buscar os assuntos em alta: {e}")
+        tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Não consegui buscar as notícias do momento: {e}")
         return
     if not assuntos:
-        tg("sendMessage", chat_id=CHAT_ID, text="Nenhum assunto em alta agora.")
+        tg("sendMessage", chat_id=CHAT_ID, text="Nenhuma notícia em alta agora.")
         return
-    nomes = [a["trend_name"] for a in assuntos]
-    db.table("bot_estado").upsert({"chave": "atualidades", "valor": json.dumps(nomes, ensure_ascii=False)}).execute()
-    linhas = ["📈 Em alta no X agora (no seu nicho):\n"]
+    db.table("bot_estado").upsert({"chave": "atualidades", "valor": json.dumps(assuntos, ensure_ascii=False)}).execute()
+    icones = {"News": "📰", "Sports": "⚽", "Entertainment": "🎬", "Business": "💼", "Technology": "💻"}
+    linhas = ["📰 Notícias do momento no X:\n"]
     for i, a in enumerate(assuntos):
-        extra = " · ".join(x for x in (a.get("post_count"), a.get("trending_since")) if x)
-        linhas.append(f"{i + 1}. {a['trend_name']}" + (f" ({extra})" if extra else ""))
-    linhas.append("\nToque no número para eu escrever um rascunho sobre o assunto.")
+        linhas.append(f"{i + 1}. {icones.get(a.get('category'), '•')} {a['name']}")
+    linhas.append("\nToque no número para eu escrever um rascunho sobre a notícia.")
     botoes = [{"text": str(i + 1), "callback_data": f"alta:{i}"} for i in range(len(assuntos))]
     teclado = [botoes[i:i + 5] for i in range(0, len(botoes), 5)]
     tg("sendMessage", chat_id=CHAT_ID, text="\n".join(linhas), reply_markup={"inline_keyboard": teclado})
@@ -172,7 +171,7 @@ def salvar_offset(db, offset: int):
 AVISO_PEDIDO = "⏳ Recebi o link. As 3 opções de resposta chegam aqui em alguns minutos."
 AJUDA = ("Comandos:\n"
          "• /gerar: busca notícias e gera rascunhos agora\n"
-         "• /atualidades: assuntos em alta no X agora, para tweetar sobre eles\n"
+         "• /atualidades: notícias do momento no X, para tweetar sobre elas\n"
          "• Escreva o que quer tweetar (ex.: \"tweet sobre o hack do Mercado Bitcoin e a confiança nas "
          "exchanges brasileiras\") e eu faço o rascunho\n"
          "• Cole o link de um post do X para receber 3 sugestões de resposta\n"
@@ -202,13 +201,15 @@ def tratar_clique(db, cq: dict):
         if i >= len(assuntos):
             tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Lista antiga, mande /atualidades de novo")
             return
-        db.table("bot_estado").upsert({"chave": f"pedido_alta:{msg['message_id']}:{i}", "valor": assuntos[i]}).execute()
+        escolhido = assuntos[i] if isinstance(assuntos[i], dict) else {"name": assuntos[i]}
+        db.table("bot_estado").upsert({"chave": f"pedido_alta:{msg['message_id']}:{i}",
+                                       "valor": json.dumps(escolhido, ensure_ascii=False)}).execute()
         if repetido_assunto(db, msg["message_id"], i):
             tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Já estou escrevendo esse")
             return
         disparar("respostas.yml")
         tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Escrevendo")
-        confirmar(msg["message_id"], f"⏳ Escrevendo sobre \"{assuntos[i]}\". O rascunho chega em alguns minutos.")
+        confirmar(msg["message_id"], f"⏳ Escrevendo sobre \"{escolhido['name']}\". O rascunho chega em 2 a 3 minutos.")
         return
     if acao == "outras":
         from respostas import registrar_pedido

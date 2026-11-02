@@ -11,6 +11,7 @@ Roda no GitHub Actions, onde o Claude está disponível pela assinatura. `--chec
 pedidos, para o workflow não instalar o Claude à toa.
 """
 import html
+import json
 import os
 import re
 import sys
@@ -79,6 +80,35 @@ def assuntos_em_alta() -> list[dict]:
     return r.json().get("data", [])
 
 
+# Temas buscados nas notícias do X para o /atualidades (cada notícia lida tem custo na API).
+TEMAS_NOTICIAS = ["Brazil", "Wall Street stocks", "bitcoin"]
+
+
+def noticias_do_momento() -> list[dict]:
+    """Notícias do momento no X (aba Notícias), com título e resumo. Notícias primeiro, mais recentes antes."""
+    import requests
+    from requests_oauthlib import OAuth1
+
+    from config import env
+    auth = OAuth1(env("X_API_KEY"), env("X_API_SECRET"), env("X_ACCESS_TOKEN"), env("X_ACCESS_TOKEN_SECRET"))
+    vistas, noticias = set(), []
+    for tema in TEMAS_NOTICIAS:
+        r = requests.get("https://api.x.com/2/news/search", auth=auth, timeout=30, params={
+            "query": tema, "max_age_hours": 18, "max_results": 6,
+            "news.fields": "name,summary,hook,category,updated_at"})
+        if not r.ok:
+            print(f"[respostas] notícias de '{tema}' falharam: {r.status_code} {r.text[:200]}")
+            continue
+        for n in r.json().get("data", []):
+            if n.get("name") and n["name"] not in vistas:
+                vistas.add(n["name"])
+                noticias.append({k: n.get(k) for k in ("name", "summary", "hook", "category", "updated_at")})
+    noticias.sort(key=lambda n: n.get("updated_at") or "", reverse=True)
+    so_noticias = [n for n in noticias if n.get("category") == "News"]
+    # Principalmente notícias: o resto (esporte, entretenimento) só entra se faltar.
+    return so_noticias if len(so_noticias) >= 6 else so_noticias + [n for n in noticias if n not in so_noticias]
+
+
 PALAVRAS_VAZIAS = {"the", "a", "an", "of", "in", "on", "to", "for", "and", "as", "from", "with", "by", "at",
                    "o", "a", "os", "as", "de", "do", "da", "dos", "das", "em", "no", "na", "e", "para", "com",
                    "after", "over", "since", "amid", "its", "is", "are", "across"}
@@ -103,13 +133,38 @@ def posts_sobre(assunto: str) -> list[str]:
     return []
 
 
+def gerar_e_avisar(db, gerar_pedido, enviar_pendentes, instrucao: str, assunto: str) -> bool:
+    try:
+        if gerar_pedido(db, instrucao, origem=f"em alta no X: {assunto}"):
+            tg("sendMessage", chat_id=CHAT_ID, text=f"✅ Pronto o rascunho sobre \"{assunto}\" 👇")
+            enviar_pendentes(db)
+            return True
+        tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Não deu para escrever sobre \"{assunto}\" sem inventar fatos.")
+    except Exception as e:
+        tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Falha ao escrever sobre \"{assunto}\": {e}")
+    return False
+
+
 def atender_assuntos(db):
     from gerador import gerar_pedido
     from telegram_bot import enviar_pendentes
 
     for p in db.table("bot_estado").select("*").like("chave", "pedido_alta:%").execute().data:
         db.table("bot_estado").delete().eq("chave", p["chave"]).execute()
-        assunto = p["valor"]
+        try:
+            noticia = json.loads(p["valor"])
+        except ValueError:
+            noticia = {"name": p["valor"]}
+        assunto = noticia["name"]
+        if noticia.get("summary"):
+            # Notícia do X: o resumo já é a fonte, sem gastar leitura de posts.
+            instrucao = (
+                f"Tweet sobre esta notícia do momento no X: \"{assunto}\".\n"
+                "Use as the only source of facts the headline and summary below; keep the same figures, "
+                "period and actors.\n"
+                f"Summary: {noticia['summary']}\nHook: {noticia.get('hook') or ''}")
+            gerar_e_avisar(db, gerar_pedido, enviar_pendentes, instrucao, assunto)
+            continue
         posts = posts_sobre(assunto)
         if not posts:
             tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Não achei posts sobre \"{assunto}\" para usar como base.")
