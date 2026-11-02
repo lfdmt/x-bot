@@ -1,5 +1,5 @@
 {
   "functions": {
-    "api/telegram.py": { "maxDuration": 30 }
+    "api/telegram.py": { "maxDuration": 60 }
   }
 }

@@ -1,26 +1,30 @@
-"""3) Bot de Telegram para aprovar, editar ou descartar rascunhos.
+"""3) Bot de Telegram: postar agora, agendar para daqui a 30 minutos, editar ou descartar rascunhos.
 
-Funciona em execuções curtas (ideal para GitHub Actions): a cada rodada ele
-processa os cliques e respostas acumulados e envia os rascunhos novos.
-Use `python telegram_bot.py --loop` para deixar rodando localmente.
+Os cliques chegam na hora pelo webhook na Vercel (api/telegram.py). Este script, rodando
+no GitHub Actions, envia os rascunhos novos. `python telegram_bot.py --loop` também processa
+cliques por leitura, para uso local sem webhook.
 
 Para editar: responda (reply) à mensagem do rascunho com o texto novo.
 """
 import json
 import sys
 import time
+from datetime import datetime, timedelta, timezone
 
 import requests
 
 from config import env, supabase
+from publicador import BRASILIA, EM_ANDAMENTO, agendar, publicar_um
 
 API = f"https://api.telegram.org/bot{env('TELEGRAM_BOT_TOKEN')}"
 CHAT_ID = int(env("TELEGRAM_CHAT_ID"))
 LIMITE_TWEET = 280
 
 
-# Respostas curtas que significam "aprovar", nunca "trocar o texto por isto".
-COMANDOS_APROVAR = {"pode postar", "postar", "posta", "aprovar", "aprovado", "aprova", "ok", "sim"}
+# Respostas curtas que significam "postar agora", nunca "trocar o texto por isto".
+COMANDOS_POSTAR = {"pode postar", "postar", "posta", "postar agora", "agora", "aprovar", "aprovado",
+                   "aprova", "ok", "sim"}
+ESPERA_AGENDADA = timedelta(minutes=30)
 NOMES_MIDIA = {"materia": "imagem da matéria", "grafico": "gráfico", "gif": "GIF", "logos": "cards com logos"}
 
 
@@ -56,13 +60,42 @@ def editar(message_id: int, texto: str, markup: dict | None = None):
 
 
 def botoes(r: dict) -> dict:
-    linha = [
-        {"text": "✅ Aprovar", "callback_data": f"aprovar:{r['id']}"},
-        {"text": "🗑 Descartar", "callback_data": f"descartar:{r['id']}"},
-    ]
+    segunda = [{"text": "🗑 Descartar", "callback_data": f"descartar:{r['id']}"}]
     if r.get("midia_urls"):
-        linha.append({"text": "🚫 Sem mídia", "callback_data": f"semmidia:{r['id']}"})
-    return {"inline_keyboard": [linha]}
+        segunda.append({"text": "🚫 Sem mídia", "callback_data": f"semmidia:{r['id']}"})
+    return {"inline_keyboard": [
+        [{"text": "🚀 Postar agora", "callback_data": f"agora:{r['id']}"},
+         {"text": "⏰ Em 30 min", "callback_data": f"em30:{r['id']}"}],
+        segunda,
+    ]}
+
+
+def reservar(db, r: dict) -> bool:
+    """Passa de pendente para aprovado só se ainda estiver pendente (evita postar duas vezes num duplo clique)."""
+    return bool(db.table("rascunhos").update({"status": "aprovado"})
+                .eq("id", r["id"]).eq("status", "pendente").execute().data)
+
+
+def postar_agora(db, r: dict, message_id: int):
+    if not reservar(db, r):
+        return
+    agendar(db, r["id"], EM_ANDAMENTO)  # o agendador do GitHub não pega este
+    editar(message_id, f"{corpo(r)}\n\n⏳ Publicando…")
+    link = publicar_um(db, r)
+    if link:
+        editar(message_id, f"{corpo(r)}\n\n🚀 PUBLICADO: {link}")
+    else:
+        status = db.table("rascunhos").select("status").eq("id", r["id"]).execute().data[0]["status"]
+        aviso = "⚠️ Falhou, veja a mensagem de erro" if status == "erro" else "🧪 Modo de teste: não foi postado"
+        editar(message_id, f"{corpo(r)}\n\n{aviso}")
+
+
+def postar_em_30(db, r: dict, message_id: int):
+    if not reservar(db, r):
+        return
+    quando = datetime.now(timezone.utc) + ESPERA_AGENDADA
+    agendar(db, r["id"], quando)
+    editar(message_id, f"{corpo(r)}\n\n⏰ AGENDADO para {quando.astimezone(BRASILIA):%H:%M} (Brasília)")
 
 
 def corpo(r: dict) -> str:
@@ -95,11 +128,17 @@ def tratar_clique(db, cq: dict):
         editar(msg["message_id"], corpo(r), botoes(r))
         tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Vai sair só o texto")
         return
-    novo_status = "aprovado" if acao == "aprovar" else "descartado"
-    db.table("rascunhos").update({"status": novo_status}).eq("id", r["id"]).execute()
-    selo = "✅ APROVADO, entra na fila de publicação" if novo_status == "aprovado" else "🗑 DESCARTADO"
-    editar(msg["message_id"], f"{corpo(r)}\n\n{selo}")
-    tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text=selo)
+    if acao in ("agora", "aprovar"):  # "aprovar" vem de mensagens antigas
+        tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Publicando…")
+        postar_agora(db, r, msg["message_id"])
+        return
+    if acao == "em30":
+        tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Agendado")
+        postar_em_30(db, r, msg["message_id"])
+        return
+    db.table("rascunhos").update({"status": "descartado"}).eq("id", r["id"]).execute()
+    editar(msg["message_id"], f"{corpo(r)}\n\n🗑 DESCARTADO")
+    tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Descartado")
 
 
 def tratar_resposta(db, msg: dict):
@@ -113,10 +152,8 @@ def tratar_resposta(db, msg: dict):
            text="Esse rascunho não está mais pendente, edição ignorada.")
         return
     texto = msg["text"].strip()
-    if texto.lower().strip(" .!") in COMANDOS_APROVAR:
-        db.table("rascunhos").update({"status": "aprovado"}).eq("id", r["id"]).execute()
-        editar(original, f"{corpo(r)}\n\n✅ APROVADO, entra na fila de publicação")
-        tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=original, text="✅ Aprovado")
+    if texto.lower().strip(" .!") in COMANDOS_POSTAR:
+        postar_agora(db, r, original)
         return
     if len(texto) > LIMITE_TWEET:
         tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
