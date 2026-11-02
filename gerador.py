@@ -111,8 +111,12 @@ def resolver_midia(fonte: dict, formato: str, saida: dict) -> tuple[str | None, 
         return None, None
 
 
-def gerar_um(fonte: dict, formato: str) -> dict | None:
+def gerar_um(fonte: dict, formato: str, ja_cobertos: list[str]) -> dict | None:
+    cobertos = "\n".join(f"- {t.splitlines()[0][:140]}" for t in ja_cobertos[-25:]) or "- (none)"
     pedido = (
+        "Stories already drafted recently. If this source is about the same event as any of them, "
+        "even from another outlet or angle, set publicar=false:\n"
+        f"{cobertos}\n\n"
         f"Source type: {fonte['tipo']} (from {fonte.get('origem') or 'unknown'})\n"
         f"Source language: {fonte['idioma']}\n"
         f"Title: {fonte['titulo']}\n"
@@ -155,10 +159,14 @@ def main():
         formato_de(r["midia_tipo"]) for r in
         reversed(db.table("rascunhos").select("midia_tipo").order("id", desc=True).limit(9).execute().data)
     ]
+    ja_cobertos = [
+        r["texto"] for r in
+        reversed(db.table("rascunhos").select("texto").order("id", desc=True).limit(25).execute().data)
+    ]
     for fonte in fontes:
         formato = proximo_formato(recentes)
         try:
-            saida = gerar_um(fonte, formato)
+            saida = gerar_um(fonte, formato, ja_cobertos)
         except (RuntimeError, subprocess.TimeoutExpired, json.JSONDecodeError) as e:
             print(f"[gerador] erro em {fonte['url']}: {e}")
             continue
@@ -176,6 +184,7 @@ def main():
 
         midia_tipo, midia_urls = resolver_midia(fonte, formato, saida)
         recentes.append(formato_de(midia_tipo))
+        ja_cobertos.append(tweet)
         db.table("rascunhos").insert({
             "fonte_id": fonte["id"],
             "texto": tweet,
