@@ -86,7 +86,9 @@ PALAVRAS_VAZIAS = {"the", "a", "an", "of", "in", "on", "to", "for", "and", "as",
 
 def posts_sobre(assunto: str) -> list[str]:
     """Até 10 posts recentes e relevantes sobre o assunto, como fonte de fatos."""
-    termos = [t for t in re.findall(r"[\w$.]+", assunto) if t.lower() not in PALAVRAS_VAZIAS and len(t) > 1]
+    # Sem "$": na busca do X, "$12.8" vira filtro de cashtag e traz posts de outro assunto.
+    termos = [t.strip(".") for t in re.findall(r"[\w.]+", assunto.replace("$", " "))
+              if t.lower() not in PALAVRAS_VAZIAS and len(t.strip(".")) > 1]
     x = cliente_x()
     for qtd in (5, 3, 2):  # se a busca vier vazia, afrouxa
         consulta = " ".join(termos[:qtd]) + " -is:retweet -is:reply"
@@ -113,8 +115,13 @@ def atender_assuntos(db):
             tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Não achei posts sobre \"{assunto}\" para usar como base.")
             continue
         contexto = "\n---\n".join(t[:600] for t in posts)
-        instrucao = (f"Tweet sobre o assunto em alta no X agora: \"{assunto}\".\n"
-                     f"Use como fonte só o que estes posts dizem (confira se concordam entre si):\n{contexto}")
+        instrucao = (
+            f"Tweet sobre ESTE assunto em alta no X agora: \"{assunto}\".\n"
+            "The headline above is the story and its numbers are the main facts: the post must be about exactly "
+            "this angle (same figure, same period, same actors). The posts below are only supporting context; "
+            "use a detail from them only if it is about this same story and consistent with the headline. "
+            "If they cover a different figure or angle, ignore them.\n"
+            f"Supporting posts:\n{contexto}")
         try:
             if gerar_pedido(db, instrucao, origem=f"em alta no X: {assunto}"):
                 tg("sendMessage", chat_id=CHAT_ID, text=f"✅ Pronto o rascunho sobre \"{assunto}\" 👇")
