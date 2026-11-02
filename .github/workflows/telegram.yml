@@ -1,0 +1,28 @@
+name: Telegram (aprovações)
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # o GitHub pode atrasar alguns minutos
+  workflow_dispatch:
+
+concurrency:
+  group: telegram   # nunca duas leituras do getUpdates ao mesmo tempo
+  cancel-in-progress: false
+
+jobs:
+  rodar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python telegram_bot.py

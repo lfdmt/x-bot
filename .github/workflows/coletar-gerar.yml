@@ -1,0 +1,41 @@
+name: Coletar RSS e gerar rascunhos
+
+on:
+  schedule:
+    - cron: "15 */3 * * *"   # a cada 3 horas (UTC)
+  workflow_dispatch:
+
+concurrency:
+  group: coletar-gerar
+  cancel-in-progress: false
+
+jobs:
+  rodar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Token da assinatura Pro/Max: gere com `claude setup-token`
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      RASCUNHOS_POR_EXECUCAO: ${{ vars.RASCUNHOS_POR_EXECUCAO || '5' }}
+      # Leitura dos posts do @beincrypto (cerca de US$ 0,005 por post lido)
+      COLETAR_X: ${{ vars.COLETAR_X || 'true' }}
+      X_API_KEY: ${{ secrets.X_API_KEY }}
+      X_API_SECRET: ${{ secrets.X_API_SECRET }}
+      X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+      X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
+      # Opcional: sem ela o bot só não oferece GIF
+      GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: npm install -g @anthropic-ai/claude-code
+      - run: python coletor.py
+      - run: python gerador.py

@@ -1,0 +1,7 @@
+supabase>=2.10
+feedparser>=6.0
+tweepy>=4.14
+requests>=2.32
+python-dotenv>=1.0
+matplotlib>=3.8
+requests-oauthlib>=1.3
