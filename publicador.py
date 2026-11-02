@@ -89,6 +89,16 @@ def publicar_um(db, r: dict) -> str | None:
               f"  mídia: {', '.join(r.get('midia_urls') or []) or 'nenhuma'}")
         return None
 
+    # Trava: se outro processo (Vercel, GitHub, Mac) já está publicando este rascunho, não repete.
+    try:
+        db.table("bot_estado").insert({"chave": f"publicando:{r['id']}", "valor": datetime.now(timezone.utc).isoformat()}).execute()
+    except Exception:
+        print(f"[publicador] #{r['id']} já está sendo publicado em outro lugar")
+        return None
+    atual = db.table("rascunhos").select("status").eq("id", r["id"]).execute().data
+    if not atual or atual[0]["status"] != "aprovado":
+        return None
+
     media_ids = None
     if r.get("midia_urls"):
         try:
