@@ -1,7 +1,8 @@
 """4) Publica no X os rascunhos aprovados: texto e mídia (imagem, gráfico ou GIF), sem link da matéria.
 
-"Postar agora" publica direto do webhook do Telegram (publicar_um). "Em 30 min" grava o horário
-em bot_estado (chave agendar:<id>) e este script, rodando a cada 5 minutos, publica o que venceu.
+"Postar agora" publica direto do webhook do Telegram (publicar_um). "Em 30 min" e "Próximo horário
+bom" gravam o horário em bot_estado (chave agendar:<id>) e este script, rodando a cada 5 minutos,
+publica o que venceu. No máximo LIMITE_DIARIO posts por dia (horário de Brasília).
 Com DRY_RUN=true só mostra o que seria postado e não altera nada.
 """
 import os
@@ -17,6 +18,9 @@ POR_EXECUCAO = int(os.getenv("PUBLICACOES_POR_EXECUCAO", "1"))
 BRASILIA = timezone(timedelta(hours=-3))
 # Marca de "publicação em andamento": impede que o agendador pegue o mesmo rascunho.
 EM_ANDAMENTO = "9999-12-31T00:00:00+00:00"
+# Picos de engajamento no Brasil: manhã, almoço, fim de tarde e noite (horário de Brasília).
+HORARIOS_BONS = [(8, 30), (12, 15), (18, 30), (20, 30)]
+LIMITE_DIARIO = int(os.getenv("LIMITE_DIARIO", "5"))
 
 
 def avisar_telegram(texto: str):
@@ -44,6 +48,38 @@ def agendar(db, rascunho_id: int, quando: datetime | str):
 def agendamentos(db) -> dict[int, datetime]:
     linhas = db.table("bot_estado").select("*").like("chave", "agendar:%").execute().data
     return {int(l["chave"].split(":")[1]): datetime.fromisoformat(l["valor"]) for l in linhas}
+
+
+def posts_no_dia(db, quando: datetime) -> int:
+    """Publicados mais agendados no dia (horário de Brasília) que contém `quando`."""
+    inicio = quando.astimezone(BRASILIA).replace(hour=0, minute=0, second=0, microsecond=0)
+    fim = inicio + timedelta(days=1)
+    publicados = (db.table("rascunhos").select("id").eq("status", "publicado")
+                  .gte("publicado_em", inicio.isoformat()).lt("publicado_em", fim.isoformat()).execute().data)
+    agendados = [h for h in agendamentos(db).values() if inicio <= h < fim]
+    return len(publicados) + len(agendados)
+
+
+def dia_cheio(db, quando: datetime) -> bool:
+    return posts_no_dia(db, quando) >= LIMITE_DIARIO
+
+
+def proximo_horario_bom(db) -> datetime | None:
+    """Próximo horário de pico livre, em um dia que ainda não bateu o limite."""
+    agora = datetime.now(timezone.utc)
+    ocupados = [h for h in agendamentos(db).values() if h.year < 9999]
+    hoje = agora.astimezone(BRASILIA).date()
+    for dias in range(8):
+        dia = hoje + timedelta(days=dias)
+        for hora, minuto in HORARIOS_BONS:
+            horario = datetime(dia.year, dia.month, dia.day, hora, minuto, tzinfo=BRASILIA)
+            if horario <= agora + timedelta(minutes=2):
+                continue
+            if any(abs(horario - h) < timedelta(minutes=45) for h in ocupados):
+                continue
+            if not dia_cheio(db, horario):
+                return horario
+    return None
 
 
 def publicar_um(db, r: dict) -> str | None:

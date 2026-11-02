@@ -14,7 +14,8 @@ from datetime import datetime, timedelta, timezone
 import requests
 
 from config import env, supabase
-from publicador import BRASILIA, EM_ANDAMENTO, agendar, publicar_um
+from publicador import (BRASILIA, EM_ANDAMENTO, LIMITE_DIARIO, agendar, dia_cheio,
+                        proximo_horario_bom, publicar_um)
 
 API = f"https://api.telegram.org/bot{env('TELEGRAM_BOT_TOKEN')}"
 CHAT_ID = int(env("TELEGRAM_CHAT_ID"))
@@ -66,8 +67,13 @@ def botoes(r: dict) -> dict:
     return {"inline_keyboard": [
         [{"text": "🚀 Postar agora", "callback_data": f"agora:{r['id']}"},
          {"text": "⏰ Em 30 min", "callback_data": f"em30:{r['id']}"}],
+        [{"text": "🕐 Próximo horário bom", "callback_data": f"bom:{r['id']}"}],
         segunda,
     ]}
+
+
+AVISO_LIMITE = (f"Limite de {LIMITE_DIARIO} posts por dia atingido. "
+                "Use 🕐 Próximo horário bom para agendar no próximo dia livre.")
 
 
 def reservar(db, r: dict) -> bool:
@@ -90,12 +96,13 @@ def postar_agora(db, r: dict, message_id: int):
         editar(message_id, f"{corpo(r)}\n\n{aviso}")
 
 
-def postar_em_30(db, r: dict, message_id: int):
+def agendar_para(db, r: dict, message_id: int, quando: datetime):
     if not reservar(db, r):
         return
-    quando = datetime.now(timezone.utc) + ESPERA_AGENDADA
     agendar(db, r["id"], quando)
-    editar(message_id, f"{corpo(r)}\n\n⏰ AGENDADO para {quando.astimezone(BRASILIA):%H:%M} (Brasília)")
+    local = quando.astimezone(BRASILIA)
+    dia = "hoje" if local.date() == datetime.now(BRASILIA).date() else f"em {local:%d/%m}"
+    editar(message_id, f"{corpo(r)}\n\n⏰ AGENDADO para {dia} às {local:%H:%M} (Brasília)")
 
 
 def corpo(r: dict) -> str:
@@ -114,9 +121,18 @@ def salvar_offset(db, offset: int):
     db.table("bot_estado").upsert({"chave": "telegram_offset", "valor": str(offset)}).execute()
 
 
+AVISO_PEDIDO = "⏳ Recebi o link. As 3 opções de resposta chegam aqui em até 5 minutos."
+
+
 def tratar_clique(db, cq: dict):
     acao, _, rid = cq["data"].partition(":")
     msg = cq["message"]
+    if acao == "outras":
+        from respostas import registrar_pedido
+        tweet_id, _, usuario = rid.partition(":")
+        registrar_pedido(db, f"x.com/{usuario}/status/{tweet_id}")
+        tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text=AVISO_PEDIDO, show_alert=True)
+        return
     rascunho = db.table("rascunhos").select("*").eq("id", int(rid)).execute().data
     if not rascunho or rascunho[0]["status"] != "pendente":
         tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Esse rascunho não está mais pendente")
@@ -128,13 +144,26 @@ def tratar_clique(db, cq: dict):
         editar(msg["message_id"], corpo(r), botoes(r))
         tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Vai sair só o texto")
         return
+    agora = datetime.now(timezone.utc)
+    if acao in ("agora", "aprovar", "em30") and dia_cheio(db, agora + (ESPERA_AGENDADA if acao == "em30" else timedelta())):
+        tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text=AVISO_LIMITE, show_alert=True)
+        return
     if acao in ("agora", "aprovar"):  # "aprovar" vem de mensagens antigas
         tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Publicando…")
         postar_agora(db, r, msg["message_id"])
         return
     if acao == "em30":
         tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Agendado")
-        postar_em_30(db, r, msg["message_id"])
+        agendar_para(db, r, msg["message_id"], agora + ESPERA_AGENDADA)
+        return
+    if acao == "bom":
+        quando = proximo_horario_bom(db)
+        if not quando:
+            tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"],
+               text="Nenhum horário livre nos próximos 7 dias.", show_alert=True)
+            return
+        tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Agendado")
+        agendar_para(db, r, msg["message_id"], quando)
         return
     db.table("rascunhos").update({"status": "descartado"}).eq("id", r["id"]).execute()
     editar(msg["message_id"], f"{corpo(r)}\n\n🗑 DESCARTADO")
@@ -153,6 +182,9 @@ def tratar_resposta(db, msg: dict):
         return
     texto = msg["text"].strip()
     if texto.lower().strip(" .!") in COMANDOS_POSTAR:
+        if dia_cheio(db, datetime.now(timezone.utc)):
+            tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"], text=AVISO_LIMITE)
+            return
         postar_agora(db, r, original)
         return
     if len(texto) > LIMITE_TWEET:
@@ -173,8 +205,14 @@ def tratar_atualizacao(db, u: dict):
             tratar_clique(db, cq)
     elif "message" in u:
         msg = u["message"]
-        if msg["chat"]["id"] == CHAT_ID and msg.get("text") and msg.get("reply_to_message"):
+        if msg["chat"]["id"] != CHAT_ID or not msg.get("text"):
+            return
+        if msg.get("reply_to_message"):
             tratar_resposta(db, msg)
+            return
+        from respostas import registrar_pedido
+        if registrar_pedido(db, msg["text"]):
+            tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"], text=AVISO_PEDIDO)
 
 
 def processar_atualizacoes(db, espera: int = 0):

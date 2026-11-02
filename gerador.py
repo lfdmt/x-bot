@@ -111,6 +111,29 @@ def resolver_midia(fonte: dict, formato: str, saida: dict) -> tuple[str | None, 
         return None, None
 
 
+def claude_json(pedido: str, sistema: str, schema: dict) -> dict | None:
+    """Chama o Claude pela assinatura (`claude -p`) e devolve a saída validada pelo schema."""
+    # Sem ANTHROPIC_API_KEY no ambiente, o claude usa a assinatura e não a API paga.
+    ambiente = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+    proc = subprocess.run(
+        [
+            "claude", "-p", pedido,
+            "--model", MODELO,
+            "--system-prompt", sistema,
+            "--json-schema", json.dumps(schema),
+            "--output-format", "json",
+            "--tools", "",
+            "--strict-mcp-config",
+            "--no-session-persistence",
+        ],
+        capture_output=True, text=True, timeout=300, env=ambiente,
+    )
+    saida = json.loads(proc.stdout or "{}")
+    if proc.returncode != 0 or saida.get("is_error"):
+        raise RuntimeError(saida.get("result") or proc.stderr.strip() or f"código {proc.returncode}")
+    return saida.get("structured_output")
+
+
 def gerar_um(fonte: dict, formato: str, ja_cobertos: list[str]) -> dict | None:
     cobertos = "\n".join(f"- {t.splitlines()[0][:140]}" for t in ja_cobertos[-25:]) or "- (none)"
     pedido = (
@@ -124,25 +147,7 @@ def gerar_um(fonte: dict, formato: str, ja_cobertos: list[str]) -> dict | None:
         f"Post format: {FORMATOS[formato]}\n\n"
         "Write one post about this."
     )
-    # Sem ANTHROPIC_API_KEY no ambiente, o claude usa a assinatura e não a API paga.
-    ambiente = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
-    proc = subprocess.run(
-        [
-            "claude", "-p", pedido,
-            "--model", MODELO,
-            "--system-prompt", system_prompt(),
-            "--json-schema", json.dumps(SCHEMA),
-            "--output-format", "json",
-            "--tools", "",
-            "--strict-mcp-config",
-            "--no-session-persistence",
-        ],
-        capture_output=True, text=True, timeout=300, env=ambiente,
-    )
-    saida = json.loads(proc.stdout or "{}")
-    if proc.returncode != 0 or saida.get("is_error"):
-        raise RuntimeError(saida.get("result") or proc.stderr.strip() or f"código {proc.returncode}")
-    return saida.get("structured_output")
+    return claude_json(pedido, system_prompt(), SCHEMA)
 
 
 def main():
