@@ -67,6 +67,61 @@ def pedidos_de_tweet(db) -> list[dict]:
     return db.table("bot_estado").select("*").like("chave", "pedido_tweet:%").execute().data
 
 
+def assuntos_em_alta() -> list[dict]:
+    """Assuntos em alta personalizados da sua conta no X (no seu nicho, não o Brasil em geral)."""
+    import requests
+    from requests_oauthlib import OAuth1
+
+    from config import env
+    auth = OAuth1(env("X_API_KEY"), env("X_API_SECRET"), env("X_ACCESS_TOKEN"), env("X_ACCESS_TOKEN_SECRET"))
+    r = requests.get("https://api.x.com/2/users/personalized_trends", auth=auth, timeout=30)
+    r.raise_for_status()
+    return r.json().get("data", [])
+
+
+PALAVRAS_VAZIAS = {"the", "a", "an", "of", "in", "on", "to", "for", "and", "as", "from", "with", "by", "at",
+                   "o", "a", "os", "as", "de", "do", "da", "dos", "das", "em", "no", "na", "e", "para", "com",
+                   "after", "over", "since", "amid", "its", "is", "are", "across"}
+
+
+def posts_sobre(assunto: str) -> list[str]:
+    """Até 10 posts recentes e relevantes sobre o assunto, como fonte de fatos."""
+    termos = [t for t in re.findall(r"[\w$.]+", assunto) if t.lower() not in PALAVRAS_VAZIAS and len(t) > 1]
+    x = cliente_x()
+    for qtd in (5, 3, 2):  # se a busca vier vazia, afrouxa
+        consulta = " ".join(termos[:qtd]) + " -is:retweet -is:reply"
+        try:
+            resp = x.search_recent_tweets(consulta, max_results=10, sort_order="relevancy", user_auth=True,
+                                          tweet_fields=["note_tweet"])
+        except tweepy.TweepyException as e:
+            print(f"[respostas] busca do assunto falhou: {e}")
+            return []
+        if resp.data:
+            return [(p.data.get("note_tweet") or {}).get("text") or p.text for p in resp.data]
+    return []
+
+
+def atender_assuntos(db):
+    from gerador import gerar_pedido
+
+    for p in db.table("bot_estado").select("*").like("chave", "pedido_alta:%").execute().data:
+        db.table("bot_estado").delete().eq("chave", p["chave"]).execute()
+        assunto = p["valor"]
+        posts = posts_sobre(assunto)
+        if not posts:
+            tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Não achei posts sobre \"{assunto}\" para usar como base.")
+            continue
+        contexto = "\n---\n".join(t[:600] for t in posts)
+        instrucao = (f"Tweet sobre o assunto em alta no X agora: \"{assunto}\".\n"
+                     f"Use como fonte só o que estes posts dizem (confira se concordam entre si):\n{contexto}")
+        try:
+            if not gerar_pedido(db, instrucao):
+                tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Os posts sobre \"{assunto}\" não trouxeram fatos "
+                   "suficientes para um tweet sem inventar nada.")
+        except Exception as e:
+            tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Falha ao escrever sobre \"{assunto}\": {e}")
+
+
 def atender_pedidos_de_tweet(db):
     from gerador import gerar_pedido
     from telegram_bot import enviar_pendentes
@@ -207,13 +262,15 @@ def main():
         return
     pendentes = pedidos(db)
     if "--checar" in sys.argv:
-        tem = bool(pendentes or pedidos_de_tweet(db))
+        tem = bool(pendentes or pedidos_de_tweet(db) or
+                   db.table("bot_estado").select("chave").like("chave", "pedido_alta:%").execute().data)
         saida = os.getenv("GITHUB_OUTPUT")
         if saida:
             with open(saida, "a") as f:
                 f.write(f"tem={'1' if tem else '0'}\n")
         print(f"[respostas] há pedidos: {tem}")
         return
+    atender_assuntos(db)
     atender_pedidos_de_tweet(db)
     for tweet_id in pendentes:
         valor = db.table("bot_estado").select("valor").eq("chave", f"pedido_resposta:{tweet_id}").execute().data

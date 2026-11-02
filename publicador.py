@@ -2,7 +2,7 @@
 
 "Postar agora" publica direto do webhook do Telegram (publicar_um). "Em 30 min" e "Próximo horário
 bom" gravam o horário em bot_estado (chave agendar:<id>) e este script, rodando a cada 5 minutos,
-publica o que venceu. No máximo LIMITE_DIARIO posts por dia (horário de Brasília).
+publica o que venceu. LIMITE_DIARIO (variável de ambiente) limita os posts por dia; 0 desliga o limite.
 Com DRY_RUN=true só mostra o que seria postado e não altera nada.
 """
 import os
@@ -20,7 +20,7 @@ BRASILIA = timezone(timedelta(hours=-3))
 EM_ANDAMENTO = "9999-12-31T00:00:00+00:00"
 # Picos de engajamento no Brasil: manhã, almoço, fim de tarde e noite (horário de Brasília).
 HORARIOS_BONS = [(8, 30), (12, 15), (18, 30), (20, 30)]
-LIMITE_DIARIO = int(os.getenv("LIMITE_DIARIO", "5"))
+LIMITE_DIARIO = int(os.getenv("LIMITE_DIARIO", "0"))  # 0 = sem limite
 
 
 def avisar_telegram(texto: str):
@@ -61,7 +61,7 @@ def posts_no_dia(db, quando: datetime) -> int:
 
 
 def dia_cheio(db, quando: datetime) -> bool:
-    return posts_no_dia(db, quando) >= LIMITE_DIARIO
+    return LIMITE_DIARIO > 0 and posts_no_dia(db, quando) >= LIMITE_DIARIO
 
 
 def proximo_horario_bom(db) -> datetime | None:
