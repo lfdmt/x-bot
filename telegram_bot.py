@@ -77,6 +77,19 @@ AVISO_LIMITE = (f"Limite de {LIMITE_DIARIO} posts por dia atingido. "
                 "Use 🕐 Próximo horário bom para agendar no próximo dia livre.")
 
 
+def confirmar(message_id: int, texto: str):
+    """Mensagem nova, respondendo ao rascunho: mais visível que só editar a mensagem original."""
+    tg("sendMessage", silencioso=True, chat_id=CHAT_ID, reply_to_message_id=message_id, text=texto)
+
+
+def repetido(db, cq: dict) -> bool:
+    """Cliques repetidos no mesmo botão não geram uma enxurrada de avisos iguais."""
+    chave = f"clique:{cq['message']['message_id']}"
+    ja = db.table("bot_estado").select("valor").eq("chave", chave).execute().data
+    db.table("bot_estado").upsert({"chave": chave, "valor": cq["data"]}).execute()
+    return bool(ja)
+
+
 def reservar(db, r: dict) -> bool:
     """Passa de pendente para aprovado só se ainda estiver pendente (evita postar duas vezes num duplo clique)."""
     return bool(db.table("rascunhos").update({"status": "aprovado"})
@@ -88,13 +101,14 @@ def postar_agora(db, r: dict, message_id: int):
         return
     agendar(db, r["id"], EM_ANDAMENTO)  # o agendador do GitHub não pega este
     editar(message_id, f"{corpo(r)}\n\n⏳ Publicando…")
-    link = publicar_um(db, r)
+    link = publicar_um(db, r)  # quando dá certo, publicar_um já manda "🚀 Publicado: link"
     if link:
         editar(message_id, f"{corpo(r)}\n\n🚀 PUBLICADO: {link}")
     else:
         status = db.table("rascunhos").select("status").eq("id", r["id"]).execute().data[0]["status"]
         aviso = "⚠️ Falhou, veja a mensagem de erro" if status == "erro" else "🧪 Modo de teste: não foi postado"
         editar(message_id, f"{corpo(r)}\n\n{aviso}")
+        confirmar(message_id, f"{aviso} (rascunho #{r['id']})")
 
 
 def agendar_para(db, r: dict, message_id: int, quando: datetime):
@@ -104,6 +118,10 @@ def agendar_para(db, r: dict, message_id: int, quando: datetime):
     local = quando.astimezone(BRASILIA)
     dia = "hoje" if local.date() == datetime.now(BRASILIA).date() else f"em {local:%d/%m}"
     editar(message_id, f"{corpo(r)}\n\n⏰ AGENDADO para {dia} às {local:%H:%M} (Brasília)")
+    extra = ""
+    if local.date() != datetime.now(BRASILIA).date() and dia_cheio(db, datetime.now(timezone.utc)):
+        extra = f"\nHoje já tem {LIMITE_DIARIO} posts, por isso foi para o próximo dia."
+    confirmar(message_id, f"⏰ Agendado: rascunho #{r['id']} sai {dia} às {local:%H:%M}.{extra}")
 
 
 def corpo(r: dict) -> str:
@@ -157,6 +175,8 @@ def tratar_clique(db, cq: dict):
     rascunho = db.table("rascunhos").select("*").eq("id", int(rid)).execute().data
     if not rascunho or rascunho[0]["status"] != "pendente":
         tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Esse rascunho não está mais pendente")
+        if rascunho and not repetido(db, cq):
+            confirmar(msg["message_id"], f"ℹ️ Rascunho #{rid} já está {rascunho[0]['status']}.")
         return
     r = rascunho[0]
     if acao == "semmidia":
@@ -164,10 +184,12 @@ def tratar_clique(db, cq: dict):
         r["midia_tipo"] = r["midia_urls"] = None
         editar(msg["message_id"], corpo(r), botoes(r))
         tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Vai sair só o texto")
+        confirmar(msg["message_id"], f"🚫 Rascunho #{r['id']} vai sair sem mídia, só o texto.")
         return
     agora = datetime.now(timezone.utc)
     if acao in ("agora", "aprovar", "em30") and dia_cheio(db, agora + (ESPERA_AGENDADA if acao == "em30" else timedelta())):
         tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text=AVISO_LIMITE, show_alert=True)
+        confirmar(msg["message_id"], f"⛔ {AVISO_LIMITE}")
         return
     if acao in ("agora", "aprovar"):  # "aprovar" vem de mensagens antigas
         tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Publicando…")
@@ -188,6 +210,7 @@ def tratar_clique(db, cq: dict):
         return
     db.table("rascunhos").update({"status": "descartado"}).eq("id", r["id"]).execute()
     editar(msg["message_id"], f"{corpo(r)}\n\n🗑 DESCARTADO")
+    confirmar(msg["message_id"], f"🗑 Rascunho #{r['id']} descartado.")
     tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Descartado")
 
 
