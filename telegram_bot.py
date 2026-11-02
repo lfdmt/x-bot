@@ -128,20 +128,26 @@ def tratar_resposta(db, msg: dict):
     tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=original, text="✏️ Texto atualizado")
 
 
+def tratar_atualizacao(db, u: dict):
+    """Um clique ou mensagem do Telegram. Usado pelo webhook (api/telegram.py) e pelo modo de leitura."""
+    if "callback_query" in u:
+        cq = u["callback_query"]
+        if cq["message"]["chat"]["id"] == CHAT_ID:
+            tratar_clique(db, cq)
+    elif "message" in u:
+        msg = u["message"]
+        if msg["chat"]["id"] == CHAT_ID and msg.get("text") and msg.get("reply_to_message"):
+            tratar_resposta(db, msg)
+
+
 def processar_atualizacoes(db, espera: int = 0):
+    # Com o webhook ativo o Telegram recusa o getUpdates (409): os cliques já chegam pela Vercel.
     offset = ler_offset(db)
-    updates = tg("getUpdates", offset=offset, timeout=espera,
+    updates = tg("getUpdates", silencioso=True, offset=offset, timeout=espera,
                  allowed_updates=["message", "callback_query"]) or []
     for u in updates:
         try:
-            if "callback_query" in u:
-                cq = u["callback_query"]
-                if cq["message"]["chat"]["id"] == CHAT_ID:
-                    tratar_clique(db, cq)
-            elif "message" in u:
-                msg = u["message"]
-                if msg["chat"]["id"] == CHAT_ID and msg.get("text") and msg.get("reply_to_message"):
-                    tratar_resposta(db, msg)
+            tratar_atualizacao(db, u)
         finally:
             offset = u["update_id"] + 1
             salvar_offset(db, offset)
