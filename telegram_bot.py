@@ -77,6 +77,13 @@ AVISO_LIMITE = (f"Limite de {LIMITE_DIARIO} posts por dia atingido. "
                 "Use 🕐 Próximo horário bom para agendar no próximo dia livre.")
 
 
+def repetido_assunto(db, message_id: int, i: int) -> bool:
+    chave = f"alta_pedido:{message_id}:{i}"
+    ja = db.table("bot_estado").select("chave").eq("chave", chave).execute().data
+    db.table("bot_estado").upsert({"chave": chave, "valor": "1"}).execute()
+    return bool(ja)
+
+
 def mostrar_atualidades(db):
     from respostas import assuntos_em_alta
     try:
@@ -196,6 +203,9 @@ def tratar_clique(db, cq: dict):
             tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Lista antiga, mande /atualidades de novo")
             return
         db.table("bot_estado").upsert({"chave": f"pedido_alta:{msg['message_id']}:{i}", "valor": assuntos[i]}).execute()
+        if repetido_assunto(db, msg["message_id"], i):
+            tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Já estou escrevendo esse")
+            return
         disparar("respostas.yml")
         tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Escrevendo")
         confirmar(msg["message_id"], f"⏳ Escrevendo sobre \"{assuntos[i]}\". O rascunho chega em alguns minutos.")

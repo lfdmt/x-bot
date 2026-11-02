@@ -152,7 +152,7 @@ def gerar_um(fonte: dict, formato: str, ja_cobertos: list[str]) -> dict | None:
     return claude_json(pedido, system_prompt(), SCHEMA)
 
 
-def gerar_pedido(db, instrucao: str) -> int | None:
+def gerar_pedido(db, instrucao: str, origem: str = "pedido seu no Telegram") -> int | None:
     """Rascunho a partir de um pedido escrito por você no Telegram. Devolve o id do rascunho."""
     recentes = [formato_de(r["midia_tipo"]) for r in
                 db.table("rascunhos").select("midia_tipo").order("id", desc=True).limit(9).execute().data]
@@ -171,7 +171,7 @@ def gerar_pedido(db, instrucao: str) -> int | None:
     fonte = {"tipo": "noticia", "url": "", "imagem_url": None}
     midia_tipo, midia_urls = resolver_midia(fonte, formato, saida)
     linha = db.table("rascunhos").insert({
-        "texto": saida["tweet"].strip(), "link": "pedido seu no Telegram", "status": "pendente",
+        "texto": saida["tweet"].strip(), "link": origem, "status": "pendente",
         "midia_tipo": midia_tipo, "midia_urls": midia_urls,
     }).execute().data
     return linha[0]["id"] if linha else None

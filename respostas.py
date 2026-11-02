@@ -103,6 +103,7 @@ def posts_sobre(assunto: str) -> list[str]:
 
 def atender_assuntos(db):
     from gerador import gerar_pedido
+    from telegram_bot import enviar_pendentes
 
     for p in db.table("bot_estado").select("*").like("chave", "pedido_alta:%").execute().data:
         db.table("bot_estado").delete().eq("chave", p["chave"]).execute()
@@ -115,7 +116,10 @@ def atender_assuntos(db):
         instrucao = (f"Tweet sobre o assunto em alta no X agora: \"{assunto}\".\n"
                      f"Use como fonte só o que estes posts dizem (confira se concordam entre si):\n{contexto}")
         try:
-            if not gerar_pedido(db, instrucao):
+            if gerar_pedido(db, instrucao, origem=f"em alta no X: {assunto}"):
+                tg("sendMessage", chat_id=CHAT_ID, text=f"✅ Pronto o rascunho sobre \"{assunto}\" 👇")
+                enviar_pendentes(db)
+            else:
                 tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Os posts sobre \"{assunto}\" não trouxeram fatos "
                    "suficientes para um tweet sem inventar nada.")
         except Exception as e:
