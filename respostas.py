@@ -63,6 +63,25 @@ def pedidos(db) -> list[str]:
     return [l["chave"].split(":", 1)[1] for l in linhas]
 
 
+def pedidos_de_tweet(db) -> list[dict]:
+    return db.table("bot_estado").select("*").like("chave", "pedido_tweet:%").execute().data
+
+
+def atender_pedidos_de_tweet(db):
+    from gerador import gerar_pedido
+    from telegram_bot import enviar_pendentes
+
+    for p in pedidos_de_tweet(db):
+        db.table("bot_estado").delete().eq("chave", p["chave"]).execute()
+        try:
+            if not gerar_pedido(db, p["valor"]):
+                tg("sendMessage", chat_id=CHAT_ID, text="⚠️ Não consegui escrever esse sem inventar fatos. "
+                   "Mande mais detalhes (números, nomes, o que aconteceu).")
+        except Exception as e:
+            tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Falha ao gerar o tweet pedido: {e}")
+    enviar_pendentes(db)
+
+
 def sistema() -> str:
     return (
         "You write replies for the personal X account of the Head of LATAM at BeInCrypto. "
@@ -188,12 +207,14 @@ def main():
         return
     pendentes = pedidos(db)
     if "--checar" in sys.argv:
+        tem = bool(pendentes or pedidos_de_tweet(db))
         saida = os.getenv("GITHUB_OUTPUT")
         if saida:
             with open(saida, "a") as f:
-                f.write(f"tem={'1' if pendentes else '0'}\n")
-        print(f"[respostas] {len(pendentes)} pedidos")
+                f.write(f"tem={'1' if tem else '0'}\n")
+        print(f"[respostas] há pedidos: {tem}")
         return
+    atender_pedidos_de_tweet(db)
     for tweet_id in pendentes:
         valor = db.table("bot_estado").select("valor").eq("chave", f"pedido_resposta:{tweet_id}").execute().data
         db.table("bot_estado").delete().eq("chave", f"pedido_resposta:{tweet_id}").execute()

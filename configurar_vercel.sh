@@ -12,4 +12,8 @@ for k in SUPABASE_URL SUPABASE_SERVICE_KEY TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID T
   printf %s "$v" | vercel env add "$k" production >/dev/null
   echo "✓ $k"
 done
+# Token do GitHub para o bot disparar a geração na hora (/gerar e pedidos pelo chat).
+vercel env rm GITHUB_TOKEN production --yes >/dev/null 2>&1 || true
+gh auth token | tr -d '\n' | vercel env add GITHUB_TOKEN production >/dev/null
+echo "✓ GITHUB_TOKEN"
 echo "Pronto. Avise o Claude."

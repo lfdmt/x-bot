@@ -7,6 +7,7 @@ cliques por leitura, para uso local sem webhook.
 Para editar: responda (reply) à mensagem do rascunho com o texto novo.
 """
 import json
+import os
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -121,7 +122,26 @@ def salvar_offset(db, offset: int):
     db.table("bot_estado").upsert({"chave": "telegram_offset", "valor": str(offset)}).execute()
 
 
-AVISO_PEDIDO = "⏳ Recebi o link. As 3 opções de resposta chegam aqui em até 5 minutos."
+AVISO_PEDIDO = "⏳ Recebi o link. As 3 opções de resposta chegam aqui em alguns minutos."
+AJUDA = ("Comandos:\n"
+         "• /gerar: busca notícias e gera rascunhos agora\n"
+         "• Escreva o que quer tweetar (ex.: \"tweet sobre o hack do Mercado Bitcoin e a confiança nas "
+         "exchanges brasileiras\") e eu faço o rascunho\n"
+         "• Cole o link de um post do X para receber 3 sugestões de resposta\n"
+         "• Responda a um rascunho com outro texto para trocar o tweet")
+REPOSITORIO = "lfdmt/x-bot"
+
+
+def disparar(workflow: str):
+    """Roda um workflow do GitHub na hora, sem esperar o agendamento."""
+    token = os.getenv("GITHUB_TOKEN")
+    if not token:
+        return
+    r = requests.post(f"https://api.github.com/repos/{REPOSITORIO}/actions/workflows/{workflow}/dispatches",
+                      headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+                      json={"ref": "main"}, timeout=20)
+    if r.status_code != 204:
+        print(f"[telegram] não consegui disparar {workflow}: {r.status_code} {r.text[:200]}")
 
 
 def tratar_clique(db, cq: dict):
@@ -131,6 +151,7 @@ def tratar_clique(db, cq: dict):
         from respostas import registrar_pedido
         tweet_id, _, usuario = rid.partition(":")
         registrar_pedido(db, f"x.com/{usuario}/status/{tweet_id}")
+        disparar("respostas.yml")
         tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text=AVISO_PEDIDO, show_alert=True)
         return
     rascunho = db.table("rascunhos").select("*").eq("id", int(rid)).execute().data
@@ -211,8 +232,21 @@ def tratar_atualizacao(db, u: dict):
             tratar_resposta(db, msg)
             return
         from respostas import registrar_pedido
-        if registrar_pedido(db, msg["text"]):
+        texto = msg["text"].strip()
+        if registrar_pedido(db, texto):
+            disparar("respostas.yml")
             tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"], text=AVISO_PEDIDO)
+        elif texto.lower().startswith("/gerar"):
+            disparar("coletar-gerar.yml")
+            tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
+               text="⏳ Buscando notícias. Os rascunhos novos chegam em alguns minutos.")
+        elif len(texto) >= 15 and not texto.startswith("/"):
+            db.table("bot_estado").upsert({"chave": f"pedido_tweet:{msg['message_id']}", "valor": texto}).execute()
+            disparar("respostas.yml")
+            tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
+               text="⏳ Escrevendo. O rascunho chega aqui em alguns minutos.")
+        else:
+            tg("sendMessage", chat_id=CHAT_ID, text=AJUDA)
 
 
 def processar_atualizacoes(db, espera: int = 0):

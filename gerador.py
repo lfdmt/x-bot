@@ -150,6 +150,31 @@ def gerar_um(fonte: dict, formato: str, ja_cobertos: list[str]) -> dict | None:
     return claude_json(pedido, system_prompt(), SCHEMA)
 
 
+def gerar_pedido(db, instrucao: str) -> int | None:
+    """Rascunho a partir de um pedido escrito por você no Telegram. Devolve o id do rascunho."""
+    recentes = [formato_de(r["midia_tipo"]) for r in
+                db.table("rascunhos").select("midia_tipo").order("id", desc=True).limit(9).execute().data]
+    # Sem matéria de origem, o formato imagens só consegue usar cards com logos.
+    formato = proximo_formato(list(reversed(recentes)))
+    pedido = (
+        "The account owner asked for a post. Treat his message as the brief and as the only source of "
+        "facts: do not add numbers, names or events he did not mention. publicar=false only if the request "
+        "is impossible without inventing facts; explain why in motivo.\n\n"
+        f"His request:\n\"\"\"\n{instrucao}\n\"\"\"\n\n"
+        f"Post format: {FORMATOS[formato]}\n\nWrite one post."
+    )
+    saida = claude_json(pedido, system_prompt(), SCHEMA)
+    if not saida or not saida["publicar"] or len(saida["tweet"].strip()) > LIMITE_TWEET:
+        return None
+    fonte = {"tipo": "noticia", "url": "", "imagem_url": None}
+    midia_tipo, midia_urls = resolver_midia(fonte, formato, saida)
+    linha = db.table("rascunhos").insert({
+        "texto": saida["tweet"].strip(), "link": "pedido seu no Telegram", "status": "pendente",
+        "midia_tipo": midia_tipo, "midia_urls": midia_urls,
+    }).execute().data
+    return linha[0]["id"] if linha else None
+
+
 def main():
     db = supabase()
     fontes = (
