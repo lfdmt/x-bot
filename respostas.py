@@ -10,6 +10,7 @@ Dois caminhos:
 Roda no GitHub Actions, onde o Claude está disponível pela assinatura. `--checar` só diz se há
 pedidos, para o workflow não instalar o Claude à toa.
 """
+import html
 import os
 import re
 import sys
@@ -103,15 +104,19 @@ def sugerir(tweet_id: str, usuario: str, texto: str, contexto: str = ""):
         return
 
     resumo = texto if len(texto) <= 200 else texto[:200] + "…"
-    linhas = [f"💬 Respostas para @{usuario}{contexto}:\n\"{resumo}\"\n"]
+    post = f"https://x.com/{usuario}/status/{tweet_id}"
+    linhas = [f"💬 Respostas para <a href=\"{post}\">@{html.escape(usuario)}</a>{html.escape(contexto)}:\n"
+              f"<i>{html.escape(resumo)}</i>\n"]
     for i, o in enumerate(opcoes, 1):
-        linhas.append(f"{i}️⃣ {o['angulo']}\n{o['texto']}\n")
-    linhas.append("Toque num botão: o X abre com a resposta escrita, é só revisar e responder.")
+        # Em <code>, um toque no texto copia a resposta inteira no Telegram.
+        linhas.append(f"{i}️⃣ <b>{html.escape(o['angulo'])}</b>\n<code>{html.escape(o['texto'])}</code>\n")
+    linhas.append("Botão: abre o X com a resposta escrita. Se cair no navegador, toque no texto para "
+                  f"copiar e abra o <a href=\"{post}\">post no X</a>.")
     teclado = [[{"text": f"Abrir no X: {i}", "url": (
         f"https://x.com/intent/post?in_reply_to={tweet_id}&text={quote(o['texto'])}")}]
         for i, o in enumerate(opcoes, 1)]
     teclado.append([{"text": "🔄 Outras opções", "callback_data": f"outras:{tweet_id}:{usuario}"}])
-    tg("sendMessage", chat_id=CHAT_ID, text="\n".join(linhas),
+    tg("sendMessage", chat_id=CHAT_ID, text="\n".join(linhas), parse_mode="HTML",
        reply_markup={"inline_keyboard": teclado}, disable_web_page_preview=True)
 
 
