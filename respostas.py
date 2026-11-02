@@ -91,8 +91,9 @@ def noticias_do_momento() -> list[dict]:
 
     from config import env
     auth = OAuth1(env("X_API_KEY"), env("X_API_SECRET"), env("X_ACCESS_TOKEN"), env("X_ACCESS_TOKEN_SECRET"))
-    vistas, noticias = set(), []
+    vistas, por_tema = set(), []
     for tema in TEMAS_NOTICIAS:
+        noticias = []
         r = requests.get("https://api.x.com/2/news/search", auth=auth, timeout=30, params={
             "query": tema, "max_age_hours": 18, "max_results": 6,
             "news.fields": "name,summary,hook,category,updated_at"})
@@ -103,10 +104,15 @@ def noticias_do_momento() -> list[dict]:
             if n.get("name") and n["name"] not in vistas:
                 vistas.add(n["name"])
                 noticias.append({k: n.get(k) for k in ("name", "summary", "hook", "category", "updated_at")})
-    noticias.sort(key=lambda n: n.get("updated_at") or "", reverse=True)
-    so_noticias = [n for n in noticias if n.get("category") == "News"]
-    # Principalmente notícias: o resto (esporte, entretenimento) só entra se faltar.
-    return so_noticias if len(so_noticias) >= 6 else so_noticias + [n for n in noticias if n not in so_noticias]
+        # Principalmente notícias: esporte e entretenimento só no fim da fila de cada tema.
+        noticias.sort(key=lambda n: n.get("updated_at") or "", reverse=True)
+        noticias.sort(key=lambda n: n.get("category") != "News")
+        por_tema.append(noticias)
+    # Intercala os temas (Brasil, mercado, cripto) para nenhum ocupar a lista inteira.
+    intercaladas = []
+    for rodada in range(max((len(t) for t in por_tema), default=0)):
+        intercaladas += [t[rodada] for t in por_tema if rodada < len(t)]
+    return intercaladas
 
 
 PALAVRAS_VAZIAS = {"the", "a", "an", "of", "in", "on", "to", "for", "and", "as", "from", "with", "by", "at",
