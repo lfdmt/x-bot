@@ -1,9 +1,9 @@
 name: Sugestões de resposta (perfis brasileiros)
 
+# Desligado (custo de leitura na API do X, ~US$ 0,12 por busca). Para religar, devolva o bloco:
+#   schedule:
+#     - cron: "30 10,14,20 * * *"   # 7h30, 11h30 e 17h30 de Brasília
 on:
-  schedule:
-    # 7h30, 11h30 e 17h30 de Brasília: dá tempo de responder antes dos picos
-    - cron: "30 10,14,20 * * *"
   workflow_dispatch:
 
 concurrency:

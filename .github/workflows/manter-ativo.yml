@@ -18,6 +18,6 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - run: |
-          for wf in coletar-gerar.yml telegram.yml publicar.yml respostas.yml descobrir.yml manter-ativo.yml; do
+          for wf in coletar-gerar.yml telegram.yml publicar.yml respostas.yml manter-ativo.yml; do
             gh workflow enable "$wf" --repo "${{ github.repository }}"
           done
