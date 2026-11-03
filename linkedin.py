@@ -55,14 +55,31 @@ SCHEMA = {
 }
 
 
-def sistema() -> str:
+def exemplos(db) -> list[str]:
+    """Posts seus enviados com /exemplo no Telegram: o Claude imita o tom deles."""
+    linhas = db.table("bot_estado").select("valor").like("chave", "linkedin_exemplo:%").execute().data
+    return [l["valor"] for l in linhas][-8:]
+
+
+def sistema(db) -> str:
+    seus = exemplos(db)
+    amostra = ("Real posts written by the profile owner. They are the strongest reference for voice: copy "
+               "their tone, rhythm, vocabulary, sentence length and how they open and close, never their "
+               "topics or facts.\n\n" + "\n\n".join(f"<post>\n{p}\n</post>" for p in seus) + "\n\n") if seus else ""
     return (
         "You write posts for the personal LinkedIn profile of the Head of LATAM at BeInCrypto, who writes "
         "about startups, innovation, AI and crypto. "
         "The voice guide below defines tone, structure and hard limits; follow it strictly.\n\n"
         f"<voice_guide>\n{VOZ.read_text(encoding='utf-8')}\n</voice_guide>\n\n"
+        f"{amostra}"
         "Rules for every post:\n"
         f"- Brazilian Portuguese only, at most {LIMITE - 300} characters.\n"
+        "- Sound like a person talking to colleagues, not like a reporter: first person, conversational, "
+        "light. The news is only the trigger for his take. Avoid news writing (leads, decree numbers, "
+        "dates, \"segundo a empresa\", \"entrou em vigor\", stacked figures).\n"
+        "- Never invent personal stories, meetings, conversations or things he saw or did. To sound "
+        "human, use opinion, doubt, everyday observations anyone would recognise (\"quem nunca...\", "
+        "\"toda vez que...\") or questions, not made up anecdotes.\n"
         "- Plain text: LinkedIn does not render markdown, so no asterisks, no headings, no bullet symbols "
         "other than an emoji or a number at the start of a line.\n"
         "- No links or URLs.\n"
@@ -117,7 +134,7 @@ def escrever_do_dia(db) -> dict | None:
         "keep crypto to at most one post in three. Prefer business angles (funding, strategy, regulation, "
         "adoption, Latin America, how companies and people work) over gadgets, deals or daily price moves. "
         "Set fonte to its index, tema to its theme, and write the post.",
-        sistema(), SCHEMA,
+        sistema(db), SCHEMA,
     )
     if saida and saida["escrever"] and 0 <= saida["fonte"] < len(fontes):
         saida["origem"] = fontes[saida["fonte"]]["url"]
@@ -125,13 +142,13 @@ def escrever_do_dia(db) -> dict | None:
     return None
 
 
-def escrever_pedido(instrucao: str) -> dict | None:
+def escrever_pedido(db, instrucao: str) -> dict | None:
     saida = claude_json(
         "The account owner asked for a LinkedIn post. Treat his message as the brief and as the only "
         "source of facts: do not add numbers, names or events he did not mention. escrever=false only if "
         "it is impossible without inventing facts; explain why in motivo.\n\n"
         f"His request:\n\"\"\"\n{instrucao}\n\"\"\"\n\nWrite the post.",
-        sistema(), SCHEMA,
+        sistema(db), SCHEMA,
     )
     if saida and saida["escrever"]:
         saida["origem"] = "pedido seu no Telegram"
@@ -179,7 +196,7 @@ def atender_pedidos(db):
     for p in db.table("bot_estado").select("*").like("chave", "pedido_linkedin:%").execute().data:
         db.table("bot_estado").delete().eq("chave", p["chave"]).execute()
         try:
-            saida = escrever_pedido(p["valor"]) if p["valor"].strip() else escrever_do_dia(db)
+            saida = escrever_pedido(db, p["valor"]) if p["valor"].strip() else escrever_do_dia(db)
             if saida:
                 enviar(db, saida)
             else:

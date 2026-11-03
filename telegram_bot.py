@@ -160,6 +160,7 @@ AJUDA = ("Comandos:\n"
          "• /gerar: busca notícias e gera rascunhos agora\n"
          "• /atualidades: assuntos do momento no Brasil, para tweetar sobre eles\n"
          "• /linkedin: post do LinkedIn com a melhor notícia do dia. /linkedin seguido de um tema usa a sua pauta\n"
+         "• /exemplo seguido de um post seu do LinkedIn: o bot aprende o seu jeito de escrever\n"
          "• Escreva o que quer tweetar (ex.: \"tweet sobre o hack do Mercado Bitcoin e a confiança nas "
          "exchanges brasileiras\") e eu faço o rascunho\n"
          "• Cole o link de um post do X para receber 3 sugestões de resposta\n"
@@ -295,6 +296,16 @@ def tratar_atualizacao(db, u: dict):
             tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"], text=AVISO_PEDIDO)
         elif texto.lower().startswith("/atualidades"):
             mostrar_atualidades(db)
+        elif texto.lower().startswith("/exemplo"):
+            post = texto[len("/exemplo"):].strip()
+            if len(post) < 80:
+                tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
+                   text="Mande /exemplo seguido do texto completo de um post seu do LinkedIn.")
+                return
+            db.table("bot_estado").upsert({"chave": f"linkedin_exemplo:{msg['message_id']}", "valor": post}).execute()
+            total = len(db.table("bot_estado").select("chave").like("chave", "linkedin_exemplo:%").execute().data)
+            tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
+               text=f"✅ Guardei. Agora são {total} posts seus de exemplo (uso os 8 mais recentes).")
         elif texto.lower().startswith("/linkedin"):
             pauta = texto[len("/linkedin"):].strip()
             db.table("bot_estado").upsert({"chave": f"pedido_linkedin:{msg['message_id']}", "valor": pauta}).execute()
