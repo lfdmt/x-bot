@@ -5,15 +5,22 @@ automática: o post chega num bloco que copia com um toque, mais um botão que a
 
 Dois caminhos:
 - `--diario` (no workflow de coleta, a cada 3 horas): uma vez por dia, a partir das 7h de Brasília,
-  o Claude escolhe a notícia das últimas 24 horas que rende mais no LinkedIn e escreve o post;
+  o Claude escolhe a notícia das últimas 24 horas que rende mais no LinkedIn e escreve o post. As
+  notícias vêm dos feeds de startups, inovação e IA abaixo e das notícias de cripto já coletadas,
+  revezando os temas;
 - `/linkedin` no Telegram (chave pedido_linkedin:<msgid>): sem texto faz o mesmo que o diário,
   com texto usa a sua mensagem como pauta. respostas.py atende o pedido na rodada seguinte.
 """
 import html
+import re
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from time import mktime
 from urllib.parse import quote
+
+import feedparser
+import requests
 
 from config import supabase
 from gerador import claude_json
@@ -23,6 +30,16 @@ from telegram_bot import CHAT_ID, tg
 VOZ = Path(__file__).with_name("voz_linkedin.md")
 LIMITE = 3000  # limite do LinkedIn
 HORA_DIARIO = 7  # Brasília
+FEEDS = [
+    ("Startupi", "https://startupi.com.br/feed/"),
+    ("NeoFeed", "https://neofeed.com.br/feed/"),
+    ("Brazil Journal", "https://braziljournal.com/feed/"),
+    ("MIT Technology Review Brasil", "https://mittechreview.com.br/feed/"),
+    ("TechCrunch", "https://techcrunch.com/feed/"),
+    ("TechCrunch IA", "https://techcrunch.com/category/artificial-intelligence/feed/"),
+    ("The Verge IA", "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml"),
+]
+TEMAS = ["startups", "inovação", "IA", "cripto"]
 
 SCHEMA = {
     "type": "object",
@@ -30,16 +47,18 @@ SCHEMA = {
         "escrever": {"type": "boolean", "description": "false se não há fatos suficientes sem inventar"},
         "motivo": {"type": "string"},
         "fonte": {"type": "integer", "description": "índice da notícia escolhida; -1 num pedido"},
+        "tema": {"type": "string", "enum": TEMAS},
         "post": {"type": "string"},
     },
-    "required": ["escrever", "motivo", "fonte", "post"],
+    "required": ["escrever", "motivo", "fonte", "tema", "post"],
     "additionalProperties": False,
 }
 
 
 def sistema() -> str:
     return (
-        "You write posts for the personal LinkedIn profile of the Head of LATAM at BeInCrypto. "
+        "You write posts for the personal LinkedIn profile of the Head of LATAM at BeInCrypto, who writes "
+        "about startups, innovation, AI and crypto. "
         "The voice guide below defines tone, structure and hard limits; follow it strictly.\n\n"
         f"<voice_guide>\n{VOZ.read_text(encoding='utf-8')}\n</voice_guide>\n\n"
         "Rules for every post:\n"
@@ -53,10 +72,28 @@ def sistema() -> str:
     )
 
 
+def dos_feeds(desde: datetime) -> list[dict]:
+    itens = []
+    for nome, url in FEEDS:
+        try:
+            feed = feedparser.parse(requests.get(url, headers={"User-Agent": "Mozilla/5.0 (x-bot)"}, timeout=15).content)
+        except requests.RequestException:
+            continue
+        for e in feed.entries[:10]:
+            data = e.get("published_parsed") or e.get("updated_parsed")
+            if data and datetime.fromtimestamp(mktime(data), tz=timezone.utc) < desde:
+                continue
+            resumo = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", e.get("summary", ""))).strip()
+            itens.append({"titulo": e.title.strip(), "resumo": resumo, "url": e.get("link", ""), "origem": nome})
+    return itens
+
+
 def candidatas(db) -> list[dict]:
-    desde = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
-    return (db.table("fontes").select("titulo,resumo,url,origem,idioma").eq("tipo", "noticia")
-            .gte("publicado_em", desde).order("publicado_em", desc=True).limit(30).execute().data)
+    """Startups, inovação e IA dos feeds acima, mais as notícias de cripto já coletadas."""
+    desde = datetime.now(timezone.utc) - timedelta(hours=24)
+    cripto = (db.table("fontes").select("titulo,resumo,url,origem").eq("tipo", "noticia")
+              .gte("publicado_em", desde.isoformat()).order("publicado_em", desc=True).limit(15).execute().data)
+    return dos_feeds(desde) + cripto
 
 
 def recentes(db) -> list[str]:
@@ -74,10 +111,12 @@ def escrever_do_dia(db) -> dict | None:
     feitos = "\n".join(f"- {t}" for t in recentes(db)) or "- (none)"
     saida = claude_json(
         f"News from the last 24 hours:\n\n{lista}\n\n"
-        f"Topics already posted on LinkedIn recently (do not repeat them):\n{feitos}\n\n"
-        "Pick the one story that gives the best LinkedIn post for this audience: business, regulation, "
-        "adoption, Latin America, media and marketing beat daily price moves. Set fonte to its index and "
-        "write the post.",
+        f"Posts already sent recently, oldest first, as theme: first line (do not repeat the story):\n{feitos}\n\n"
+        "Pick the one story that gives the best LinkedIn post for this audience. The profile covers "
+        "startups, innovation, AI and crypto: rotate between them, avoid the theme of the last post, and "
+        "keep crypto to at most one post in three. Prefer business angles (funding, strategy, regulation, "
+        "adoption, Latin America, how companies and people work) over gadgets, deals or daily price moves. "
+        "Set fonte to its index, tema to its theme, and write the post.",
         sistema(), SCHEMA,
     )
     if saida and saida["escrever"] and 0 <= saida["fonte"] < len(fontes):
@@ -118,7 +157,8 @@ def enviar(db, saida: dict):
         tg("sendMessage", chat_id=CHAT_ID, text=texto, parse_mode="HTML",
            reply_markup=vazio, disable_web_page_preview=True)
     agora = datetime.now(timezone.utc).isoformat()
-    db.table("bot_estado").upsert({"chave": f"linkedin_post:{agora}", "valor": post.splitlines()[0][:140]}).execute()
+    db.table("bot_estado").upsert({"chave": f"linkedin_post:{agora}",
+                                   "valor": f"{saida.get('tema', '?')}: {post.splitlines()[0][:140]}"}).execute()
 
 
 def diario(db):
