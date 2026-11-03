@@ -337,7 +337,8 @@ def main():
     pendentes = pedidos(db)
     if "--checar" in sys.argv:
         tem = bool(pendentes or pedidos_de_tweet(db) or
-                   db.table("bot_estado").select("chave").like("chave", "pedido_a%").execute().data)
+                   db.table("bot_estado").select("chave").like("chave", "pedido_a%").execute().data or
+                   db.table("bot_estado").select("chave").like("chave", "pedido_linkedin:%").execute().data)
         saida = os.getenv("GITHUB_OUTPUT")
         if saida:
             with open(saida, "a") as f:
@@ -347,6 +348,8 @@ def main():
     montar_atualidades(db)
     atender_assuntos(db)
     atender_pedidos_de_tweet(db)
+    from linkedin import atender_pedidos as atender_linkedin
+    atender_linkedin(db)
     for tweet_id in pendentes:
         valor = db.table("bot_estado").select("valor").eq("chave", f"pedido_resposta:{tweet_id}").execute().data
         db.table("bot_estado").delete().eq("chave", f"pedido_resposta:{tweet_id}").execute()

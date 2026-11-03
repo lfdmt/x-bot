@@ -159,6 +159,7 @@ AVISO_PEDIDO = "⏳ Recebi o link. As 3 opções de resposta chegam aqui em algu
 AJUDA = ("Comandos:\n"
          "• /gerar: busca notícias e gera rascunhos agora\n"
          "• /atualidades: assuntos do momento no Brasil, para tweetar sobre eles\n"
+         "• /linkedin: post do LinkedIn com a melhor notícia do dia. /linkedin seguido de um tema usa a sua pauta\n"
          "• Escreva o que quer tweetar (ex.: \"tweet sobre o hack do Mercado Bitcoin e a confiança nas "
          "exchanges brasileiras\") e eu faço o rascunho\n"
          "• Cole o link de um post do X para receber 3 sugestões de resposta\n"
@@ -294,6 +295,12 @@ def tratar_atualizacao(db, u: dict):
             tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"], text=AVISO_PEDIDO)
         elif texto.lower().startswith("/atualidades"):
             mostrar_atualidades(db)
+        elif texto.lower().startswith("/linkedin"):
+            pauta = texto[len("/linkedin"):].strip()
+            db.table("bot_estado").upsert({"chave": f"pedido_linkedin:{msg['message_id']}", "valor": pauta}).execute()
+            disparar("respostas.yml")
+            tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
+               text="⏳ Escrevendo o post do LinkedIn. Chega aqui em 2 a 3 minutos.")
         elif texto.lower().startswith("/gerar"):
             disparar("coletar-gerar.yml")
             tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
