@@ -1,6 +1,7 @@
 # Perfis brasileiros que você segue. Os com 20.000 seguidores ou mais (MIN_SEGUIDORES) entram na lista
 # de posts em alta, de hora em hora nos picos.
 # Um @ por linha (sem o @). Apague ou acrescente à vontade; linhas com # são ignoradas.
+beincrypto  # BeInCrypto global, em inglês. 87.613 seguidores
 Ricamconsult  # economia. 1.400.379 seguidores
 infomoney  # mercado. 655.652 seguidores
 PabloSpyer  # mercado. 318.537 seguidores
