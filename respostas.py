@@ -224,8 +224,23 @@ def sistema() -> str:
         "- Use only facts stated in the post. Never bring outside numbers, names or events: offer "
         "opinion and angle instead.\n"
         "- Add something to the conversation. No empty praise ('great post'), no self promotion.\n"
-        "- angulo is a 1 to 3 word label in Portuguese (e.g. 'Visão LATAM', 'Contraponto', 'Pergunta')."
+        "- angulo is a 1 to 3 word label in Portuguese (e.g. 'Visão LATAM', 'Contraponto', 'Pergunta').\n"
+        "- Sound like a real person typing fast on the phone, never like an AI. All lowercase (only "
+        "tickers and acronyms like BTC or ETF stay uppercase). Use internet abbreviations where natural: "
+        "vc, mto, tb, pq, q, pra, tá, msm, td, hj, blz. Light punctuation: no final period, no em dash, "
+        "no semicolon, no colon. Short, usually under 160 characters, one or two sentences.\n"
+        "- Avoid AI tells: 'não é X, é Y', 'isso mostra que', 'vale lembrar', 'em suma', 'o ponto é', "
+        "lists of three, polished parallel sentences, starting with 'Excelente' or 'Interessante'."
     )
+
+
+def casual(texto: str) -> str:
+    """Garante o tom digitado no celular: minúsculas (menos siglas, @ e $) e sem travessão nem ponto final."""
+    palavras = []
+    for p in texto.replace(" — ", ", ").replace(" – ", ", ").replace("—", ",").split(" "):
+        letras = "".join(c for c in p if c.isalpha())
+        palavras.append(p if p.startswith(("@", "$", "http")) or (len(letras) > 1 and letras.isupper()) else p.lower())
+    return " ".join(palavras).strip().rstrip(".")
 
 
 def responder(db, tweet_id: str, autor_link: str):
@@ -246,7 +261,8 @@ def responder(db, tweet_id: str, autor_link: str):
 
 def sugerir(tweet_id: str, usuario: str, texto: str, contexto: str = ""):
     saida = claude_json(f"Post by @{usuario}:\n\"\"\"\n{texto}\n\"\"\"\n\nWrite the 3 replies.", sistema(), SCHEMA)
-    opcoes = [o for o in (saida or {}).get("respostas", []) if len(o["texto"]) <= LIMITE_TWEET][:3]
+    opcoes = [{**o, "texto": casual(o["texto"])} for o in (saida or {}).get("respostas", [])]
+    opcoes = [o for o in opcoes if len(o["texto"]) <= LIMITE_TWEET][:3]
     if not opcoes:
         tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Não saiu nenhuma resposta boa para o post de @{usuario}.")
         return
