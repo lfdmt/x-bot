@@ -1,6 +1,7 @@
 name: Sugestões de resposta (perfis brasileiros)
 
-# Desligado (custo de leitura na API do X, ~US$ 0,12 por busca). Para religar, devolva o bloco:
+# Só manual. A rodada automática agora sai do relógio da Vercel (api/tick.py, HORAS_EM_ALTA).
+# Antigo agendamento:
 #   schedule:
 #     - cron: "30 10,14,20 * * *"   # 7h30, 11h30 e 17h30 de Brasília
 on:

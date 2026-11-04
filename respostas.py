@@ -268,16 +268,27 @@ def sugerir(tweet_id: str, usuario: str, texto: str, contexto: str = ""):
        reply_markup={"inline_keyboard": teclado}, disable_web_page_preview=True)
 
 
-def perfis() -> list[str]:
+MIN_SEGUIDORES = int(os.getenv("MIN_SEGUIDORES", "20000"))
+POSTS_EM_ALTA = int(os.getenv("POSTS_EM_ALTA", "5"))
+JANELA_ALTA = timedelta(hours=3)
+
+
+def perfis(minimo: int = 0) -> list[str]:
+    """Os @ da lista; com `minimo`, só os que têm pelo menos esse número de seguidores no comentário."""
     linhas = PERFIS.read_text(encoding="utf-8").splitlines() if PERFIS.exists() else []
-    return [l.split("#")[0].strip().lstrip("@") for l in linhas if l.split("#")[0].strip()]
+    saida = []
+    for l in linhas:
+        usuario, _, comentario = l.partition("#")
+        if not usuario.strip():
+            continue
+        seguidores = re.search(r"([\d.]+) seguidores", comentario)
+        if minimo and (not seguidores or int(seguidores.group(1).replace(".", "")) < minimo):
+            continue
+        saida.append(usuario.strip().lstrip("@"))
+    return saida
 
 
-def descobrir(db):
-    """Posts recentes com mais engajamento dos perfis da lista, ainda sem sugestão."""
-    usuarios = perfis()
-    if not usuarios:
-        return
+def blocos_de_busca(usuarios: list[str]) -> list[list[str]]:
     # A busca aceita até 512 caracteres por consulta: divide a lista em blocos.
     blocos, atual = [], []
     for u in usuarios:
@@ -285,48 +296,63 @@ def descobrir(db):
             blocos.append(atual)
             atual = []
         atual.append(u)
-    blocos.append(atual)
+    return blocos + [atual] if atual else blocos
 
-    x = cliente_x()
-    inicio = datetime.now(timezone.utc) - JANELA
-    candidatos = []
-    for bloco in blocos:
-        consulta = f"({' OR '.join(f'from:{u}' for u in bloco)}) -is:retweet -is:reply"
-        try:
-            resp = x.search_recent_tweets(
-                consulta, max_results=10, start_time=inicio, user_auth=True, sort_order="relevancy",
-                tweet_fields=["public_metrics", "note_tweet", "author_id"],
-                expansions=["author_id"], user_fields=["username"],
-            )
-        except tweepy.TweepyException as e:
-            print(f"[respostas] busca falhou: {e}")
-            continue
-        nomes = {u.id: u.username for u in (resp.includes or {}).get("users", [])}
-        for post in resp.data or []:
-            m = post.public_metrics
-            candidatos.append({
-                "id": str(post.id), "usuario": nomes.get(post.author_id, "?"),
-                "texto": (post.data.get("note_tweet") or {}).get("text") or post.text,
-                "pontos": m["like_count"] + 2 * m["retweet_count"] + 3 * m["reply_count"] + 2 * m["quote_count"],
-            })
 
+def descobrir(db):
+    """Posts em alta das contas grandes da lista, para você escolher quais responder.
+
+    Cada rodada lê um bloco só (10 posts, uns US$ 0,05) e a próxima pega o bloco seguinte. As
+    sugestões de resposta só são escritas para o post que você escolher no botão.
+    """
+    blocos = blocos_de_busca(perfis(MIN_SEGUIDORES))
+    if not blocos:
+        return
+    estado = db.table("bot_estado").select("valor").eq("chave", "descobrir:bloco").execute().data
+    i = (int(estado[0]["valor"]) + 1) % len(blocos) if estado else 0
+    db.table("bot_estado").upsert({"chave": "descobrir:bloco", "valor": str(i)}).execute()
+
+    consulta = f"({' OR '.join(f'from:{u}' for u in blocos[i])}) -is:retweet -is:reply"
+    agora = datetime.now(timezone.utc)
+    try:
+        resp = cliente_x().search_recent_tweets(
+            consulta, max_results=10, start_time=agora - JANELA_ALTA, user_auth=True, sort_order="relevancy",
+            tweet_fields=["public_metrics", "note_tweet", "author_id", "created_at"],
+            expansions=["author_id"], user_fields=["username"],
+        )
+    except tweepy.TweepyException as e:
+        print(f"[respostas] busca falhou: {e}")
+        return
+    nomes = {u.id: u.username for u in (resp.includes or {}).get("users", [])}
     ja = {l["chave"].split(":", 1)[1] for l in
           db.table("bot_estado").select("chave").like("chave", "sugerido:%").execute().data}
-    escolhidos = []
-    for c in sorted(candidatos, key=lambda c: -c["pontos"]):
-        # Um post por perfil por rodada, para variar.
-        if c["id"] in ja or any(e["usuario"] == c["usuario"] for e in escolhidos):
+    candidatos = []
+    for post in resp.data or []:
+        if str(post.id) in ja:
             continue
-        escolhidos.append(c)
-        if len(escolhidos) == SUGESTOES_POR_RODADA:
-            break
-    print(f"[respostas] {len(candidatos)} posts lidos, {len(escolhidos)} escolhidos")
-    for c in escolhidos:
+        m = post.public_metrics
+        candidatos.append({
+            "id": str(post.id), "usuario": nomes.get(post.author_id, "?"),
+            "texto": (post.data.get("note_tweet") or {}).get("text") or post.text,
+            "horas": max(0, int((agora - post.created_at).total_seconds() // 3600)),
+            "pontos": m["like_count"] + 2 * m["retweet_count"] + 3 * m["reply_count"] + 2 * m["quote_count"],
+        })
+    escolhidos = sorted(candidatos, key=lambda c: -c["pontos"])[:POSTS_EM_ALTA]
+    print(f"[respostas] bloco {i + 1}/{len(blocos)}: {len(resp.data or [])} posts lidos, {len(escolhidos)} novos")
+    if not escolhidos:
+        return
+
+    linhas = ["🔥 <b>Em alta nas contas grandes</b>. Toque em Responder para receber 3 sugestões.\n"]
+    teclado = []
+    for n, c in enumerate(escolhidos, 1):
         db.table("bot_estado").upsert({"chave": f"sugerido:{c['id']}", "valor": c["usuario"]}).execute()
-        try:
-            sugerir(c["id"], c["usuario"], c["texto"], contexto=f" ({c['pontos']} interações)")
-        except Exception as e:
-            print(f"[respostas] falha em {c['id']}: {e}")
+        resumo = c["texto"] if len(c["texto"]) <= 220 else c["texto"][:220] + "…"
+        quando = "agora há pouco" if c["horas"] == 0 else f"há {c['horas']} h"
+        linhas.append(f"{n}. <a href=\"https://x.com/{c['usuario']}/status/{c['id']}\">@{html.escape(c['usuario'])}</a>"
+                      f" · {c['pontos']} interações · {quando}\n<i>{html.escape(resumo)}</i>\n")
+        teclado.append({"text": f"💬 Responder {n}", "callback_data": f"outras:{c['id']}:{c['usuario']}"[:64]})
+    tg("sendMessage", chat_id=CHAT_ID, text="\n".join(linhas), parse_mode="HTML", disable_web_page_preview=True,
+       reply_markup={"inline_keyboard": [teclado[k:k + 3] for k in range(0, len(teclado), 3)]})
 
 
 def main():

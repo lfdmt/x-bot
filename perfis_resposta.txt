@@ -1,4 +1,5 @@
-# Perfis brasileiros que você segue e cujos posts recebem sugestões de resposta.
+# Perfis brasileiros que você segue. Os com 20.000 seguidores ou mais (MIN_SEGUIDORES) entram na lista
+# de posts em alta, de hora em hora nos picos.
 # Um @ por linha (sem o @). Apague ou acrescente à vontade; linhas com # são ignoradas.
 Ricamconsult  # economia. 1.400.379 seguidores
 infomoney  # mercado. 655.652 seguidores
