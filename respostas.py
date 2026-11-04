@@ -13,6 +13,7 @@ pedidos, para o workflow não instalar o Claude à toa.
 import html
 import json
 import os
+import random
 import re
 import sys
 from datetime import datetime, timedelta, timezone
@@ -293,51 +294,58 @@ def sugerir(tweet_id: str, usuario: str, texto: str, contexto: str = ""):
        reply_markup={"inline_keyboard": teclado}, disable_web_page_preview=True)
 
 
-MIN_SEGUIDORES = int(os.getenv("MIN_SEGUIDORES", "20000"))
+MIN_SEGUIDORES = int(os.getenv("MIN_SEGUIDORES", "5000"))
+# Uma conta que apareceu numa lista fica de fora das próximas por este tempo.
+DESCANSO = timedelta(hours=int(os.getenv("DESCANSO_HORAS", "6")))
 POSTS_EM_ALTA = int(os.getenv("POSTS_EM_ALTA", "5"))
-JANELA_ALTA = timedelta(hours=3)
+JANELA_ALTA = timedelta(hours=6)
 
 
-def perfis(minimo: int = 0) -> list[str]:
-    """Os @ da lista; com `minimo`, só os que têm pelo menos esse número de seguidores no comentário."""
+def lista_de_perfis() -> dict[str, int]:
+    """@ -> seguidores (do comentário da linha; 0 se não tiver)."""
     linhas = PERFIS.read_text(encoding="utf-8").splitlines() if PERFIS.exists() else []
-    saida = []
+    saida = {}
     for l in linhas:
         usuario, _, comentario = l.partition("#")
-        if not usuario.strip():
-            continue
-        seguidores = re.search(r"([\d.]+) seguidores", comentario)
-        if minimo and (not seguidores or int(seguidores.group(1).replace(".", "")) < minimo):
-            continue
-        saida.append(usuario.strip().lstrip("@"))
+        if usuario.strip():
+            seguidores = re.search(r"([\d.]+) seguidores", comentario)
+            saida[usuario.strip().lstrip("@")] = int(seguidores.group(1).replace(".", "")) if seguidores else 0
     return saida
 
 
-def blocos_de_busca(usuarios: list[str]) -> list[list[str]]:
-    # A busca aceita até 512 caracteres por consulta: divide a lista em blocos.
-    blocos, atual = [], []
-    for u in usuarios:
-        if len(" OR ".join(f"from:{x}" for x in atual + [u])) > 440:
-            blocos.append(atual)
-            atual = []
-        atual.append(u)
-    return blocos + [atual] if atual else blocos
+def perfis(minimo: int = 0) -> list[str]:
+    return [u for u, n in lista_de_perfis().items() if n >= minimo]
+
+
+def sortear_bloco(db, usuarios: list[str]) -> list[str]:
+    """Um grupo de contas que cabe numa busca (512 caracteres), sorteado entre as que não apareceram há pouco."""
+    agora = datetime.now(timezone.utc)
+    vistos = {l["chave"].split(":", 1)[1]: datetime.fromisoformat(l["valor"]) for l in
+              db.table("bot_estado").select("*").like("chave", "mostrado:%").execute().data}
+    descansadas = [u for u in usuarios if agora - vistos.get(u, datetime.min.replace(tzinfo=timezone.utc)) > DESCANSO]
+    random.shuffle(descansadas)
+    resto = [u for u in usuarios if u not in descansadas]
+    random.shuffle(resto)
+    bloco = []
+    for u in descansadas + resto:
+        if len(" OR ".join(f"from:{x}" for x in bloco + [u])) <= 440:
+            bloco.append(u)
+    return bloco
 
 
 def descobrir(db) -> bool:
-    """Posts em alta das contas grandes da lista, para você escolher quais responder.
+    """Posts em alta das contas grandes e médias da lista, para você escolher quais responder.
 
-    Cada rodada lê um bloco só (10 posts, uns US$ 0,05) e a próxima pega o bloco seguinte. As
-    sugestões de resposta só são escritas para o post que você escolher no botão.
+    Cada rodada lê 10 posts (uns US$ 0,05) de um grupo sorteado de contas, dando preferência às que
+    não apareceram nas últimas horas. O ranking é por engajamento em relação ao tamanho da conta, para
+    as médias competirem com as grandes, e entra no máximo um post por conta. As sugestões de resposta
+    só são escritas para o post que você escolher no botão.
     """
-    blocos = blocos_de_busca(perfis(MIN_SEGUIDORES))
-    if not blocos:
+    seguidores = lista_de_perfis()
+    bloco = sortear_bloco(db, perfis(MIN_SEGUIDORES))
+    if not bloco:
         return False
-    estado = db.table("bot_estado").select("valor").eq("chave", "descobrir:bloco").execute().data
-    i = (int(estado[0]["valor"]) + 1) % len(blocos) if estado else 0
-    db.table("bot_estado").upsert({"chave": "descobrir:bloco", "valor": str(i)}).execute()
-
-    consulta = f"({' OR '.join(f'from:{u}' for u in blocos[i])}) -is:retweet -is:reply"
+    consulta = f"({' OR '.join(f'from:{u}' for u in bloco)}) -is:retweet -is:reply"
     agora = datetime.now(timezone.utc)
     try:
         resp = cliente_x().search_recent_tweets(
@@ -362,15 +370,23 @@ def descobrir(db) -> bool:
             "horas": max(0, int((agora - post.created_at).total_seconds() // 3600)),
             "pontos": m["like_count"] + 2 * m["retweet_count"] + 3 * m["reply_count"] + 2 * m["quote_count"],
         })
-    escolhidos = sorted(candidatos, key=lambda c: -c["pontos"])[:POSTS_EM_ALTA]
-    print(f"[respostas] bloco {i + 1}/{len(blocos)}: {len(resp.data or [])} posts lidos, {len(escolhidos)} novos")
+    # Engajamento por mil seguidores: uma conta média com post bombando passa na frente de uma grande parada.
+    taxa = lambda c: c["pontos"] / max(seguidores.get(c["usuario"], 0), 1000) * 1000
+    escolhidos = []
+    for c in sorted(candidatos, key=lambda c: -taxa(c)):
+        if all(e["usuario"].lower() != c["usuario"].lower() for e in escolhidos):
+            escolhidos.append(c)
+        if len(escolhidos) == POSTS_EM_ALTA:
+            break
+    print(f"[respostas] {len(bloco)} contas, {len(resp.data or [])} posts lidos, {len(escolhidos)} escolhidos")
     if not escolhidos:
         return False
 
-    linhas = ["🔥 <b>Em alta nas contas grandes</b>. Toque em Responder para receber 3 sugestões.\n"]
+    linhas = ["🔥 <b>Em alta nas contas do seu nicho</b>. Toque em Responder para receber 3 sugestões.\n"]
     teclado = []
     for n, c in enumerate(escolhidos, 1):
         db.table("bot_estado").upsert({"chave": f"sugerido:{c['id']}", "valor": c["usuario"]}).execute()
+        db.table("bot_estado").upsert({"chave": f"mostrado:{c['usuario']}", "valor": agora.isoformat()}).execute()
         resumo = c["texto"] if len(c["texto"]) <= 220 else c["texto"][:220] + "…"
         quando = "agora há pouco" if c["horas"] == 0 else f"há {c['horas']} h"
         linhas.append(f"{n}. <a href=\"https://x.com/{c['usuario']}/status/{c['id']}\">@{html.escape(c['usuario'])}</a>"
