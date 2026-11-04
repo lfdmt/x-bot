@@ -159,6 +159,7 @@ AVISO_PEDIDO = "⏳ Recebi o link. As 3 opções de resposta chegam aqui em algu
 AJUDA = ("Comandos:\n"
          "• /gerar: busca notícias e gera rascunhos agora\n"
          "• /atualidades: assuntos do momento no Brasil, para tweetar sobre eles\n"
+         "• /respostas: posts em alta nas contas grandes, para escolher quais responder (chega sozinho nos picos)\n"
          "• /linkedin: post do LinkedIn com a melhor notícia do dia. /linkedin seguido de um tema usa a sua pauta\n"
          "• /exemplo seguido de um post seu do LinkedIn: o bot aprende o seu jeito de escrever\n"
          "• Escreva o que quer tweetar (ex.: \"tweet sobre o hack do Mercado Bitcoin e a confiança nas "
@@ -296,6 +297,13 @@ def tratar_atualizacao(db, u: dict):
             tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"], text=AVISO_PEDIDO)
         elif texto.lower().startswith("/atualidades"):
             mostrar_atualidades(db)
+        elif texto.lower().startswith("/respostas"):
+            from respostas import descobrir
+            tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
+               text="⏳ Buscando os posts em alta nas contas grandes.")
+            if not descobrir(db):
+                tg("sendMessage", chat_id=CHAT_ID, text="Nenhum post novo em alta neste grupo de contas agora. "
+                   "Mande /respostas de novo para olhar o outro grupo.")
         elif texto.lower().startswith("/exemplo"):
             post = texto[len("/exemplo"):].strip()
             if len(post) < 80:

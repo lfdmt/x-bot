@@ -211,7 +211,15 @@ def atender_pedidos_de_tweet(db):
     enviar_pendentes(db)
 
 
-def sistema() -> str:
+# Contas em que a resposta sai em inglês (as demais, sempre em português).
+CONTAS_EM_INGLES = {"beincrypto"}
+
+
+def sistema(ingles: bool = False) -> str:
+    idioma = ("- Always in English, casual crypto Twitter English.\n" if ingles else
+              "- Always in Brazilian Portuguese, whatever the language of the original post.\n")
+    abreviacoes = ("u, ur, rn, imo, tbh, ngl, gonna, kinda, lol" if ingles else
+                   "vc, mto, tb, pq, q, pra, tá, msm, td, hj, blz")
     return (
         "You write replies for the personal X account of the Head of LATAM at BeInCrypto. "
         "The voice guide below defines his tone; follow it.\n\n"
@@ -219,15 +227,15 @@ def sistema() -> str:
         "Rules for every reply:\n"
         "- Write exactly 3 replies, each with a different angle: an insight or LATAM perspective, a "
         "respectful counterpoint, and a sharp question that invites the author to answer.\n"
-        "- Always in Brazilian Portuguese, whatever the language of the original post.\n"
+        f"{idioma}"
         f"- At most {LIMITE_TWEET - 20} characters each. No links, no hashtags, at most one emoji.\n"
         "- Use only facts stated in the post. Never bring outside numbers, names or events: offer "
         "opinion and angle instead.\n"
         "- Add something to the conversation. No empty praise ('great post'), no self promotion.\n"
-        "- angulo is a 1 to 3 word label in Portuguese (e.g. 'Visão LATAM', 'Contraponto', 'Pergunta').\n"
+        "- angulo is always a 1 to 3 word label in Portuguese (e.g. 'Visão LATAM', 'Contraponto', 'Pergunta').\n"
         "- Sound like a real person typing fast on the phone, never like an AI. All lowercase (only "
         "tickers and acronyms like BTC or ETF stay uppercase). Use internet abbreviations where natural: "
-        "vc, mto, tb, pq, q, pra, tá, msm, td, hj, blz. Light punctuation: no final period, no em dash, "
+        f"{abreviacoes}. Light punctuation: no final period, no em dash, "
         "no semicolon, no colon. Short, usually under 160 characters, one or two sentences.\n"
         "- Avoid AI tells: 'não é X, é Y', 'isso mostra que', 'vale lembrar', 'em suma', 'o ponto é', "
         "lists of three, polished parallel sentences, starting with 'Excelente' or 'Interessante'."
@@ -260,7 +268,8 @@ def responder(db, tweet_id: str, autor_link: str):
 
 
 def sugerir(tweet_id: str, usuario: str, texto: str, contexto: str = ""):
-    saida = claude_json(f"Post by @{usuario}:\n\"\"\"\n{texto}\n\"\"\"\n\nWrite the 3 replies.", sistema(), SCHEMA)
+    saida = claude_json(f"Post by @{usuario}:\n\"\"\"\n{texto}\n\"\"\"\n\nWrite the 3 replies.",
+                        sistema(usuario.lower() in CONTAS_EM_INGLES), SCHEMA)
     opcoes = [{**o, "texto": casual(o["texto"])} for o in (saida or {}).get("respostas", [])]
     opcoes = [o for o in opcoes if len(o["texto"]) <= LIMITE_TWEET][:3]
     if not opcoes:
@@ -315,7 +324,7 @@ def blocos_de_busca(usuarios: list[str]) -> list[list[str]]:
     return blocos + [atual] if atual else blocos
 
 
-def descobrir(db):
+def descobrir(db) -> bool:
     """Posts em alta das contas grandes da lista, para você escolher quais responder.
 
     Cada rodada lê um bloco só (10 posts, uns US$ 0,05) e a próxima pega o bloco seguinte. As
@@ -323,7 +332,7 @@ def descobrir(db):
     """
     blocos = blocos_de_busca(perfis(MIN_SEGUIDORES))
     if not blocos:
-        return
+        return False
     estado = db.table("bot_estado").select("valor").eq("chave", "descobrir:bloco").execute().data
     i = (int(estado[0]["valor"]) + 1) % len(blocos) if estado else 0
     db.table("bot_estado").upsert({"chave": "descobrir:bloco", "valor": str(i)}).execute()
@@ -338,7 +347,7 @@ def descobrir(db):
         )
     except tweepy.TweepyException as e:
         print(f"[respostas] busca falhou: {e}")
-        return
+        return False
     nomes = {u.id: u.username for u in (resp.includes or {}).get("users", [])}
     ja = {l["chave"].split(":", 1)[1] for l in
           db.table("bot_estado").select("chave").like("chave", "sugerido:%").execute().data}
@@ -356,7 +365,7 @@ def descobrir(db):
     escolhidos = sorted(candidatos, key=lambda c: -c["pontos"])[:POSTS_EM_ALTA]
     print(f"[respostas] bloco {i + 1}/{len(blocos)}: {len(resp.data or [])} posts lidos, {len(escolhidos)} novos")
     if not escolhidos:
-        return
+        return False
 
     linhas = ["🔥 <b>Em alta nas contas grandes</b>. Toque em Responder para receber 3 sugestões.\n"]
     teclado = []
@@ -369,6 +378,7 @@ def descobrir(db):
         teclado.append({"text": f"💬 Responder {n}", "callback_data": f"outras:{c['id']}:{c['usuario']}"[:64]})
     tg("sendMessage", chat_id=CHAT_ID, text="\n".join(linhas), parse_mode="HTML", disable_web_page_preview=True,
        reply_markup={"inline_keyboard": [teclado[k:k + 3] for k in range(0, len(teclado), 3)]})
+    return True
 
 
 def main():
