@@ -212,12 +212,26 @@ def atender_pedidos_de_tweet(db):
     enviar_pendentes(db)
 
 
-# Contas em que a resposta sai em inglês (as demais, sempre em português).
-CONTAS_EM_INGLES = {"beincrypto"}
+ANGULOS_NICHO = (
+    "- Write exactly 3 replies, each with a different angle: an insight or LATAM perspective, a "
+    "respectful counterpoint, and a sharp question that invites the author to answer.\n")
+# Geopolítica: o objetivo é a resposta que ganha curtida e vira conversa, às vezes pelo humor.
+ANGULOS_GEO = (
+    "- This is a geopolitics / world news post. The goal is a reply people like, quote and screenshot. "
+    "Write exactly 3 replies, each with a different angle:\n"
+    "  1. Humor: a witty, ironic or meme-style line, the kind that gets the most likes under a news post "
+    "(dry irony, absurd comparison, a very Brazilian take on the situation). It must be clever, not silly.\n"
+    "  2. Viral: a bold, punchy take or observation that many people agree with and want to share.\n"
+    "  3. Visão Brasil: what this means for Brazil or Latin America, or a question that makes people answer.\n"
+    "- Never joke about deaths, victims, war crimes, disasters or human suffering. If the post is about "
+    "that, replace the humor angle with a sober, human line.\n"
+    "- No insults, no slurs, no partisan flame war, no taking sides in a way that attacks a people or "
+    "religion. Irony aims at the situation and the powerful, never at victims.\n")
 
 
-def sistema(ingles: bool = False) -> str:
-    idioma = ("- Always in English, casual crypto Twitter English.\n" if ingles else
+def sistema(ingles: bool = False, geo: bool = False) -> str:
+    estilo = "casual Twitter English" if geo else "casual crypto Twitter English"
+    idioma = (f"- Always in English, {estilo}.\n" if ingles else
               "- Always in Brazilian Portuguese, whatever the language of the original post.\n")
     abreviacoes = ("u, ur, rn, imo, tbh, ngl, gonna, kinda, lol" if ingles else
                    "vc, mto, tb, pq, q, pra, tá, msm, td, hj, blz")
@@ -226,14 +240,14 @@ def sistema(ingles: bool = False) -> str:
         "The voice guide below defines his tone; follow it.\n\n"
         f"<voice_guide>\n{VOZ.read_text(encoding='utf-8')}\n</voice_guide>\n\n"
         "Rules for every reply:\n"
-        "- Write exactly 3 replies, each with a different angle: an insight or LATAM perspective, a "
-        "respectful counterpoint, and a sharp question that invites the author to answer.\n"
+        f"{ANGULOS_GEO if geo else ANGULOS_NICHO}"
         f"{idioma}"
         f"- At most {LIMITE_TWEET - 20} characters each. No links, no hashtags, at most one emoji.\n"
         "- Use only facts stated in the post. Never bring outside numbers, names or events: offer "
         "opinion and angle instead.\n"
         "- Add something to the conversation. No empty praise ('great post'), no self promotion.\n"
-        "- angulo is always a 1 to 3 word label in Portuguese (e.g. 'Visão LATAM', 'Contraponto', 'Pergunta').\n"
+        "- angulo is always a 1 to 3 word label in Portuguese (e.g. "
+        + ("'Humor', 'Viral', 'Visão Brasil'" if geo else "'Visão LATAM', 'Contraponto', 'Pergunta'") + ").\n"
         "- Sound like a real person typing fast on the phone, never like an AI. All lowercase (only "
         "tickers and acronyms like BTC or ETF stay uppercase). Use internet abbreviations where natural: "
         f"{abreviacoes}. Light punctuation: no final period, no em dash, "
@@ -269,8 +283,9 @@ def responder(db, tweet_id: str, autor_link: str):
 
 
 def sugerir(tweet_id: str, usuario: str, texto: str, contexto: str = ""):
+    conta = lista_de_perfis().get(usuario.lower(), {})
     saida = claude_json(f"Post by @{usuario}:\n\"\"\"\n{texto}\n\"\"\"\n\nWrite the 3 replies.",
-                        sistema(usuario.lower() in CONTAS_EM_INGLES), SCHEMA)
+                        sistema(conta.get("ingles", False), conta.get("geo", False)), SCHEMA)
     opcoes = [{**o, "texto": casual(o["texto"])} for o in (saida or {}).get("respostas", [])]
     opcoes = [o for o in opcoes if len(o["texto"]) <= LIMITE_TWEET][:3]
     if not opcoes:
@@ -301,20 +316,26 @@ POSTS_EM_ALTA = int(os.getenv("POSTS_EM_ALTA", "5"))
 JANELA_ALTA = timedelta(hours=6)
 
 
-def lista_de_perfis() -> dict[str, int]:
-    """@ -> seguidores (do comentário da linha; 0 se não tiver)."""
+def lista_de_perfis() -> dict[str, dict]:
+    """@ em minúsculas -> usuario, seguidores, geo e ingles, tirados do comentário da linha."""
     linhas = PERFIS.read_text(encoding="utf-8").splitlines() if PERFIS.exists() else []
     saida = {}
     for l in linhas:
         usuario, _, comentario = l.partition("#")
-        if usuario.strip():
+        usuario = usuario.strip().lstrip("@")
+        if usuario:
             seguidores = re.search(r"([\d.]+) seguidores", comentario)
-            saida[usuario.strip().lstrip("@")] = int(seguidores.group(1).replace(".", "")) if seguidores else 0
+            saida[usuario.lower()] = {
+                "usuario": usuario,
+                "seguidores": int(seguidores.group(1).replace(".", "")) if seguidores else 0,
+                "geo": "geopolítica" in comentario.lower(),
+                "ingles": "em inglês" in comentario.lower(),
+            }
     return saida
 
 
-def perfis(minimo: int = 0) -> list[str]:
-    return [u for u, n in lista_de_perfis().items() if n >= minimo]
+def perfis(minimo: int = 0, geo: bool = False) -> list[str]:
+    return [c["usuario"] for c in lista_de_perfis().values() if c["seguidores"] >= minimo and c["geo"] == geo]
 
 
 def sortear_bloco(db, usuarios: list[str]) -> list[str]:
@@ -334,6 +355,17 @@ def sortear_bloco(db, usuarios: list[str]) -> list[str]:
 
 
 def descobrir(db) -> bool:
+    """Uma lista de posts em alta para cada nicho: cripto e mercado, e geopolítica."""
+    achou = False
+    for geo in (False, True):
+        try:
+            achou = descobrir_nicho(db, geo) or achou
+        except Exception as e:
+            print(f"[respostas] em alta ({'geopolítica' if geo else 'nicho'}) falhou: {e}")
+    return achou
+
+
+def descobrir_nicho(db, geo: bool) -> bool:
     """Posts em alta das contas grandes e médias da lista, para você escolher quais responder.
 
     Cada rodada lê 10 posts (uns US$ 0,05) de um grupo sorteado de contas, dando preferência às que
@@ -341,8 +373,8 @@ def descobrir(db) -> bool:
     as médias competirem com as grandes, e entra no máximo um post por conta. As sugestões de resposta
     só são escritas para o post que você escolher no botão.
     """
-    seguidores = lista_de_perfis()
-    bloco = sortear_bloco(db, perfis(MIN_SEGUIDORES))
+    contas = lista_de_perfis()
+    bloco = sortear_bloco(db, perfis(MIN_SEGUIDORES, geo))
     if not bloco:
         return False
     consulta = f"({' OR '.join(f'from:{u}' for u in bloco)}) -is:retweet -is:reply"
@@ -371,18 +403,19 @@ def descobrir(db) -> bool:
             "pontos": m["like_count"] + 2 * m["retweet_count"] + 3 * m["reply_count"] + 2 * m["quote_count"],
         })
     # Engajamento por mil seguidores: uma conta média com post bombando passa na frente de uma grande parada.
-    taxa = lambda c: c["pontos"] / max(seguidores.get(c["usuario"], 0), 1000) * 1000
+    taxa = lambda c: c["pontos"] / max(contas.get(c["usuario"].lower(), {}).get("seguidores", 0), 1000) * 1000
     escolhidos = []
     for c in sorted(candidatos, key=lambda c: -taxa(c)):
         if all(e["usuario"].lower() != c["usuario"].lower() for e in escolhidos):
             escolhidos.append(c)
         if len(escolhidos) == POSTS_EM_ALTA:
             break
-    print(f"[respostas] {len(bloco)} contas, {len(resp.data or [])} posts lidos, {len(escolhidos)} escolhidos")
+    print(f"[respostas] {'geopolítica' if geo else 'nicho'}: {len(bloco)} contas, {len(resp.data or [])} posts lidos, {len(escolhidos)} escolhidos")
     if not escolhidos:
         return False
 
-    linhas = ["🔥 <b>Em alta nas contas do seu nicho</b>. Toque em Responder para receber 3 sugestões.\n"]
+    titulo = "🌍 <b>Em alta na geopolítica</b>" if geo else "🔥 <b>Em alta nas contas do seu nicho</b>"
+    linhas = [f"{titulo}. Toque em Responder para receber 3 sugestões.\n"]
     teclado = []
     for n, c in enumerate(escolhidos, 1):
         db.table("bot_estado").upsert({"chave": f"sugerido:{c['id']}", "valor": c["usuario"]}).execute()

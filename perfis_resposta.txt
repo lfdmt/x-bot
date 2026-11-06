@@ -60,3 +60,25 @@ joaopkury  # cripto. 6.197 seguidores
 BeInCrypto_BR  # notícias cripto. 5.123 seguidores
 BanklessBR  # DeFi. 5.020 seguidores
 igormteich  # bitcoin. 4.409 seguidores
+
+# Geopolítica: tudo que tiver "geopolítica" no comentário vai para uma lista separada (🌍), com respostas
+# que às vezes puxam para o humor ou para o viral. "em inglês" no comentário faz a resposta sair em inglês.
+gugachacra  # geopolítica. Você segue. 1.547.910 seguidores
+XadrezVerbal  # geopolítica. Filipe Figueiredo. 319.524 seguidores
+arielpalacios  # geopolítica. América Latina. 237.490 seguidores
+JamilChade  # geopolítica. 220.719 seguidores
+OliverStuenkel  # geopolítica. Relações internacionais. 168.059 seguidores
+AnaliseGeopol  # geopolítica. Você segue. 76.883 seguidores
+MatiasSpektor  # geopolítica. Relações internacionais. 20.131 seguidores
+bbcbrasil  # geopolítica. Notícias. 3.386.698 seguidores
+g1mundo  # geopolítica. Notícias. 263.952 seguidores
+folha_mundo  # geopolítica. Notícias. 64.519 seguidores
+EstadaoInter  # geopolítica. Notícias. 44.366 seguidores
+podernaval  # geopolítica. Defesa. 17.506 seguidores
+poderaereo  # geopolítica. Defesa. 14.059 seguidores
+visegrad24  # geopolítica, em inglês. Você segue. 2.123.644 seguidores
+Reuters  # geopolítica, em inglês. Você segue. 26.442.404 seguidores
+spectatorindex  # geopolítica, em inglês. 3.598.788 seguidores
+sentdefender  # geopolítica, em inglês. Conflitos. 2.549.764 seguidores
+Osinttechnical  # geopolítica, em inglês. Conflitos. 1.911.086 seguidores
+Faytuks  # geopolítica, em inglês. 273.499 seguidores
