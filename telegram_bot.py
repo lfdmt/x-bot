@@ -382,7 +382,23 @@ def enviar_pendentes(db):
         print(f"[telegram] {len(novos)} rascunhos enviados")
 
 
+# Menu de comandos do bot (botão "/" ao lado do campo de texto). Depois de mudar, rode
+# `python telegram_bot.py --menu` uma vez.
+MENU = [
+    ("viral", "3 tweets do dia a dia. /viral tema foca num assunto"),
+    ("gerar", "Busca notícias e gera rascunhos agora"),
+    ("atualidades", "Assuntos do momento no Brasil"),
+    ("respostas", "Posts em alta para responder"),
+    ("linkedin", "Post do LinkedIn. /linkedin tema usa a sua pauta"),
+    ("exemplo", "Ensina o seu jeito de escrever no LinkedIn"),
+]
+
+
 def main():
+    if "--menu" in sys.argv:
+        ok = tg("setMyCommands", commands=[{"command": c, "description": d} for c, d in MENU])
+        print(f"[telegram] menu atualizado: {ok}")
+        return
     db = supabase()
     if "--loop" in sys.argv:
         print("[telegram] rodando em loop (Ctrl+C para sair)")
