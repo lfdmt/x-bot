@@ -198,9 +198,7 @@ SCHEMA_VIRAIS = {
 def sistema_viral() -> str:
     return (
         "You write everyday posts for the personal X account of a Brazilian who is Head of LATAM at "
-        "BeInCrypto: he lives the corporate world, startups, tech and LATAM business. The voice guide "
-        "below is his; keep his hook and punchline instincts.\n\n"
-        f"<voice_guide>\n{VOZ.read_text(encoding='utf-8')}\n</voice_guide>\n\n"
+        "BeInCrypto: he lives the corporate world, startups, tech and LATAM business.\n\n"
         "These are NOT news posts. They are the kind of tweet a real person posts during the day and that "
         "goes viral: a relatable observation, an ironic take on work life (meetings, bosses, LinkedIn "
         "culture, hybrid work, salary, CLT vs PJ), the startup and founder world, a sharp or funny take on "
@@ -216,8 +214,19 @@ def sistema_viral() -> str:
         "- Politics: irony aims at the situation and at the powerful, never at voters, a people or a "
         "religion. No insults, no defending a party or politician.\n"
         "- Never joke about deaths, victims, disasters, illness or suffering.\n"
-        "- Avoid AI tells: 'não é X, é Y', 'isso mostra que', 'vale lembrar', lists of three, polished "
-        "parallel sentences, motivational coach tone.\n"
+        "- Write exactly like a Brazilian typing fast on the phone on X, never like an AI or a copywriter:\n"
+        "  - all lowercase (only acronyms like CLT, PJ, IA, CEO stay uppercase)\n"
+        "  - internet abbreviations and slang where natural: vc, mto, tb, pq, q, pra, tá, tô, msm, td, hj, "
+        "blz, n, ngm, cmg, slk, mano, véi, tlgd, kkkk, pqp (light), real, sla, bglh\n"
+        "  - light punctuation: no final period, no em dash, no semicolon, no colon, few commas\n"
+        "  - usually one block, one or two lines. No 'hook / context / punchline' structure, no line "
+        "break before the punchline, no setup that explains the joke\n"
+        "  - short: most tweets under 140 characters\n"
+        "  - it can start mid thought ('mano', 'gente', 'eu juro', 'nada me tira da cabeça q'), "
+        "it can be a little messy and imperfect\n"
+        "- Avoid AI tells: 'não é X, é Y', 'isso mostra que', 'vale lembrar', 'pelo menos agora', "
+        "'só faltava', lists of three, polished parallel sentences, clever wordplay that sounds written, "
+        "motivational coach tone. If it sounds like a newspaper columnist, rewrite it.\n"
         "- tema is a 1 to 3 word label in Portuguese (e.g. 'Corporativo', 'Política', 'Dia a dia', 'Startups')."
     )
 
@@ -237,7 +246,8 @@ def gerar_virais(db, conversa: str, tema: str = "", quantos: int = 3) -> list[in
     saida = claude_json(pedido, sistema_viral(), SCHEMA_VIRAIS) or {}
     ids = []
     for t in saida.get("tweets", [])[:quantos]:
-        texto = t["tweet"].strip()
+        from respostas import casual
+        texto = casual(t["tweet"].strip())
         if not texto or len(texto) > LIMITE_TWEET:
             continue
         linha = db.table("rascunhos").insert({
