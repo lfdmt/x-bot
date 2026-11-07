@@ -437,6 +437,42 @@ def descobrir_nicho(db, viral: bool) -> bool:
     return True
 
 
+def conversa_viral(db) -> str:
+    """Os posts mais relevantes das últimas horas num grupo sorteado das contas virais (10 posts, uns US$ 0,05)."""
+    bloco = sortear_bloco(db, perfis(MIN_SEGUIDORES, viral=True))
+    if not bloco:
+        return ""
+    try:
+        resp = cliente_x().search_recent_tweets(
+            f"({' OR '.join(f'from:{u}' for u in bloco)}) -is:retweet -is:reply", max_results=10,
+            start_time=datetime.now(timezone.utc) - JANELA_ALTA, user_auth=True, sort_order="relevancy",
+            tweet_fields=["note_tweet", "author_id"], expansions=["author_id"], user_fields=["username"])
+    except tweepy.TweepyException as e:
+        print(f"[respostas] busca dos virais falhou: {e}")
+        return ""
+    nomes = {u.id: u.username for u in (resp.includes or {}).get("users", [])}
+    return "\n---\n".join(f"@{nomes.get(p.author_id, '?')}: "
+                          f"{((p.data.get('note_tweet') or {}).get('text') or p.text)[:400]}" for p in resp.data or [])
+
+
+def atender_virais(db):
+    from gerador import gerar_virais
+    from telegram_bot import enviar_pendentes
+
+    for p in db.table("bot_estado").select("*").like("chave", "pedido_viral:%").execute().data:
+        db.table("bot_estado").delete().eq("chave", p["chave"]).execute()
+        try:
+            ids = gerar_virais(db, conversa_viral(db), p["valor"].strip())
+        except Exception as e:
+            tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Falha ao escrever os tweets virais: {e}")
+            continue
+        if ids:
+            tg("sendMessage", chat_id=CHAT_ID, text=f"✅ {len(ids)} tweets do dia a dia 👇")
+            enviar_pendentes(db)
+        else:
+            tg("sendMessage", chat_id=CHAT_ID, text="⚠️ Não saiu nenhum tweet bom. Mande /viral de novo.")
+
+
 def main():
     db = supabase()
     if "--descobrir" in sys.argv:
@@ -446,6 +482,7 @@ def main():
     if "--checar" in sys.argv:
         tem = bool(pendentes or pedidos_de_tweet(db) or
                    db.table("bot_estado").select("chave").like("chave", "pedido_a%").execute().data or
+                   db.table("bot_estado").select("chave").like("chave", "pedido_viral:%").execute().data or
                    db.table("bot_estado").select("chave").like("chave", "pedido_linkedin:%").execute().data)
         saida = os.getenv("GITHUB_OUTPUT")
         if saida:
@@ -456,6 +493,7 @@ def main():
     montar_atualidades(db)
     atender_assuntos(db)
     atender_pedidos_de_tweet(db)
+    atender_virais(db)
     from linkedin import atender_pedidos as atender_linkedin
     atender_linkedin(db)
     for tweet_id in pendentes:

@@ -177,6 +177,78 @@ def gerar_pedido(db, instrucao: str, origem: str = "pedido seu no Telegram") -> 
     return linha[0]["id"] if linha else None
 
 
+SCHEMA_VIRAIS = {
+    "type": "object",
+    "properties": {
+        "tweets": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"tema": {"type": "string"}, "tweet": {"type": "string"}},
+                "required": ["tema", "tweet"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["tweets"],
+    "additionalProperties": False,
+}
+
+
+def sistema_viral() -> str:
+    return (
+        "You write everyday posts for the personal X account of a Brazilian who is Head of LATAM at "
+        "BeInCrypto: he lives the corporate world, startups, tech and LATAM business. The voice guide "
+        "below is his; keep his hook and punchline instincts.\n\n"
+        f"<voice_guide>\n{VOZ.read_text(encoding='utf-8')}\n</voice_guide>\n\n"
+        "These are NOT news posts. They are the kind of tweet a real person posts during the day and that "
+        "goes viral: a relatable observation, an ironic take on work life (meetings, bosses, LinkedIn "
+        "culture, hybrid work, salary, CLT vs PJ), the startup and founder world, a sharp or funny take on "
+        "politics or on what everyone is talking about today, an absurd comparison, a 'quem nunca'.\n\n"
+        "Rules:\n"
+        f"- Brazilian Portuguese, at most {LIMITE_TWEET - 10} characters, ideally under 180.\n"
+        "- Sound like a person, never like a news outlet or a brand. Never write 'X anunciou que' or "
+        "summarize a story: give an opinion, an observation or a joke.\n"
+        "- No links, no hashtags, at most one emoji.\n"
+        "- Never invent facts, numbers, quotes or events. When a tweet touches a current topic, use only "
+        "what appears in the posts provided; everyday observations need no facts.\n"
+        "- Prefer non crypto themes (the account already posts crypto news); crypto at most as a passing joke.\n"
+        "- Politics: irony aims at the situation and at the powerful, never at voters, a people or a "
+        "religion. No insults, no defending a party or politician.\n"
+        "- Never joke about deaths, victims, disasters, illness or suffering.\n"
+        "- Avoid AI tells: 'não é X, é Y', 'isso mostra que', 'vale lembrar', lists of three, polished "
+        "parallel sentences, motivational coach tone.\n"
+        "- tema is a 1 to 3 word label in Portuguese (e.g. 'Corporativo', 'Política', 'Dia a dia', 'Startups')."
+    )
+
+
+def gerar_virais(db, conversa: str, tema: str = "", quantos: int = 3) -> list[int]:
+    """Tweets do dia a dia (não notícia), no clima do que está em alta. Devolve os ids dos rascunhos."""
+    ja = [r["texto"] for r in db.table("rascunhos").select("texto").order("id", desc=True).limit(20).execute().data]
+    pedido = (
+        (f"Theme requested by the account owner: \"{tema}\". All tweets must be about it.\n\n" if tema else
+         "Spread the tweets across different themes: politics, everyday life, corporate world, startups, "
+         "current events.\n\n") +
+        "What is trending right now on Brazilian X (for mood and current topics; not a source to summarize):\n"
+        f"{conversa or '(nothing collected; write timeless everyday observations)'}\n\n"
+        "Recent drafts, do not repeat their ideas:\n" + "\n".join(f"- {t[:120]}" for t in ja) +
+        f"\n\nWrite {quantos} tweets, each with a different idea."
+    )
+    saida = claude_json(pedido, sistema_viral(), SCHEMA_VIRAIS) or {}
+    ids = []
+    for t in saida.get("tweets", [])[:quantos]:
+        texto = t["tweet"].strip()
+        if not texto or len(texto) > LIMITE_TWEET:
+            continue
+        linha = db.table("rascunhos").insert({
+            "texto": texto, "link": f"viral: {t['tema']}", "status": "pendente",
+            "midia_tipo": None, "midia_urls": None,
+        }).execute().data
+        if linha:
+            ids.append(linha[0]["id"])
+    return ids
+
+
 def main():
     db = supabase()
     fontes = (
