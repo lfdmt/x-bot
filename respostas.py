@@ -435,30 +435,6 @@ def descobrir_nicho(db, viral: bool) -> bool:
     return True
 
 
-# O /viral só lê founders, VCs e negócios: política e fofoca puxavam os tweets para fora do seu contexto.
-TEMAS_DO_VIRAL = ("startups", "corporativo")
-
-
-def conversa_viral(db) -> str:
-    """Os posts mais relevantes das últimas horas num grupo sorteado de contas de startups e negócios
-    (10 posts, uns US$ 0,05)."""
-    bloco = sortear_bloco(db, [c["usuario"] for c in lista_de_perfis().values()
-                               if c["tema"] in TEMAS_DO_VIRAL and c["seguidores"] >= MIN_SEGUIDORES])
-    if not bloco:
-        return ""
-    try:
-        resp = cliente_x().search_recent_tweets(
-            f"({' OR '.join(f'from:{u}' for u in bloco)}) -is:retweet -is:reply", max_results=10,
-            start_time=datetime.now(timezone.utc) - JANELA_ALTA, user_auth=True, sort_order="relevancy",
-            tweet_fields=["note_tweet", "author_id"], expansions=["author_id"], user_fields=["username"])
-    except tweepy.TweepyException as e:
-        print(f"[respostas] busca dos virais falhou: {e}")
-        return ""
-    nomes = {u.id: u.username for u in (resp.includes or {}).get("users", [])}
-    return "\n---\n".join(f"@{nomes.get(p.author_id, '?')}: "
-                          f"{((p.data.get('note_tweet') or {}).get('text') or p.text)[:400]}" for p in resp.data or [])
-
-
 def atender_virais(db):
     from gerador import gerar_virais
     from telegram_bot import enviar_pendentes
@@ -466,7 +442,8 @@ def atender_virais(db):
     for p in db.table("bot_estado").select("*").like("chave", "pedido_viral:%").execute().data:
         db.table("bot_estado").delete().eq("chave", p["chave"]).execute()
         try:
-            ids = gerar_virais(db, conversa_viral(db), p["valor"].strip())
+            from pauta import manchetes_do_dia
+            ids = gerar_virais(db, manchetes_do_dia(), p["valor"].strip())
         except Exception as e:
             tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Falha ao escrever os tweets virais: {e}")
             continue

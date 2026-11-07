@@ -214,10 +214,12 @@ def sistema_viral() -> str:
         "What to write: the posts of a founder, advisor and startup marketer living it in real time. "
         "Themes: startup and VC culture, fundraising, pitch decks, AI and web3 hype, unit economics, "
         "big tech and corporate absurdities, founder and work life, tech events, and his personal life "
-        "as a founder (an event he went to, a show he is watching, a drink on thursday). A take on the "
-        "day's tech or business news is fine when it is seen through that lens. No celebrity gossip, no "
-        "party politics, no generic office jokes that any account could post: it has to sound like it "
-        "came from someone inside the startup world.\n\n"
+        "as a founder (an event he went to, a show he is watching, a drink on thursday).\n"
+        "He also posts about what everyone is talking about today: the F1 race, a big game, a show, a "
+        "viral moment, tech and business news. He sees it through his own lens (like his F1 post: what "
+        "the event became, who was there, what it says about the times, or a comparison with startup "
+        "life). No celebrity gossip, no party politics, no crime, no generic office jokes that any account "
+        "could post: it has to sound like it came from someone inside the startup world.\n\n"
         "Rules:\n"
         f"- Brazilian Portuguese, at most {LIMITE_TWEET - 10} characters, most under 140. Keep tech terms "
         "people really say in English (founder, pitch, deck, moat, burn, runway, unit economics, due "
@@ -227,8 +229,8 @@ def sistema_viral() -> str:
         "- Never a news post: no 'X anunciou que', no summary. Give an opinion, an observation or a joke.\n"
         "- No links, no hashtags, emoji only if it really adds.\n"
         "- Never invent facts, numbers, quotes or events about real companies or people. When a tweet "
-        "touches a current topic, use only what appears in the posts provided. Personal moments stay "
-        "generic (no made up names or places).\n"
+        "touches a current topic, use only what the headlines say. Personal moments stay generic (no made "
+        "up names or places), and never claim he was at a specific event.\n"
         "- Crypto at most as a passing joke (the account already posts crypto news).\n"
         "- Never joke about deaths, victims, disasters, illness or suffering.\n"
         "- Write like he types: always all lowercase (names and acronyms too: ia, vc, ceo, f1), light "
@@ -247,11 +249,10 @@ def gerar_virais(db, conversa: str, tema: str = "", quantos: int = 3) -> list[in
     ja = [r["texto"] for r in db.table("rascunhos").select("texto").order("id", desc=True).limit(20).execute().data]
     pedido = (
         (f"Theme requested by the account owner: \"{tema}\". All tweets must be about it.\n\n" if tema else
-         "Spread the tweets across different angles: startups and VC, AI and tech, corporate life, "
-         "founder life.\n\n") +
-        "What founders, VCs and tech people are posting right now (for mood and current topics; not a "
-        "source to summarize):\n"
-        f"{conversa or '(nothing collected; write timeless everyday observations)'}\n\n"
+         "At least 2 of the tweets must be about something happening today, taken from the headlines "
+         "(sports, culture, tech, business). The other can be founder or startup life.\n\n") +
+        "Headlines from the last hours (what is happening today; never summarize them as news):\n"
+        f"{conversa or '(nothing collected; write timeless founder observations)'}\n\n"
         "Recent drafts, do not repeat their ideas:\n" + "\n".join(f"- {t[:120]}" for t in ja) +
         f"\n\nWrite {quantos} tweets, each with a different idea."
     )
