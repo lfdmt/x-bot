@@ -52,6 +52,7 @@ def system_prompt() -> str:
         f"<format_reference>\n{REFERENCIA.read_text(encoding='utf-8')}\n</format_reference>\n\n"
         "Rules for every post:\n"
         f"- Brazilian Portuguese only, at most {LIMITE_TWEET - 10} characters.\n"
+        "- Always all lowercase, including the first letter, names, acronyms and tickers (btc, etf, sec).\n"
         "- No links or URLs, and do not tell readers to click or read the article: the post stands alone.\n"
         "- Sources come in Portuguese, Spanish or English: news articles, market data, or posts from @beincrypto. "
         "Always write in Portuguese, in your own words; never translate a source post line by line.\n"
@@ -113,6 +114,12 @@ def resolver_midia(fonte: dict, formato: str, saida: dict) -> tuple[str | None, 
         return None, None
 
 
+def minusculas(texto: str) -> str:
+    """Tudo em minúsculas, inclusive siglas e tickers. Só @ e links ficam como estão."""
+    return "\n".join(" ".join(p if p.startswith(("@", "http")) else p.lower() for p in linha.split(" "))
+                     for linha in texto.split("\n"))
+
+
 def claude_json(pedido: str, sistema: str, schema: dict) -> dict | None:
     """Chama o Claude pela assinatura (`claude -p`) e devolve a saída validada pelo schema."""
     # Sem ANTHROPIC_API_KEY no ambiente, o claude usa a assinatura e não a API paga.
@@ -171,7 +178,7 @@ def gerar_pedido(db, instrucao: str, origem: str = "pedido seu no Telegram") -> 
     fonte = {"tipo": "noticia", "url": "", "imagem_url": None}
     midia_tipo, midia_urls = resolver_midia(fonte, formato, saida)
     linha = db.table("rascunhos").insert({
-        "texto": saida["tweet"].strip(), "link": origem, "status": "pendente",
+        "texto": minusculas(saida["tweet"].strip()), "link": origem, "status": "pendente",
         "midia_tipo": midia_tipo, "midia_urls": midia_urls,
     }).execute().data
     return linha[0]["id"] if linha else None
@@ -215,7 +222,7 @@ def sistema_viral() -> str:
         "religion. No insults, no defending a party or politician.\n"
         "- Never joke about deaths, victims, disasters, illness or suffering.\n"
         "- Write exactly like a Brazilian typing fast on the phone on X, never like an AI or a copywriter:\n"
-        "  - all lowercase (only acronyms like CLT, PJ, IA, CEO stay uppercase)\n"
+        "  - always all lowercase, including names and acronyms (clt, pj, ia, ceo)\n"
         "  - internet abbreviations and slang where natural: vc, mto, tb, pq, q, pra, tá, tô, msm, td, hj, "
         "blz, n, ngm, cmg, slk, mano, véi, tlgd, kkkk, pqp (light), real, sla, bglh\n"
         "  - light punctuation: no final period, no em dash, no semicolon, no colon, few commas\n"
@@ -294,7 +301,7 @@ def main():
         if not saida or not saida["publicar"]:
             print(f"[gerador] pulado ({saida and saida['motivo']}): {fonte['titulo']}")
             continue
-        tweet = saida["tweet"].strip()
+        tweet = minusculas(saida["tweet"].strip())
         if len(tweet) > LIMITE_TWEET:
             print(f"[gerador] tweet com {len(tweet)} caracteres, descartado: {fonte['titulo']}")
             continue
