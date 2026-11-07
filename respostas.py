@@ -333,6 +333,7 @@ def lista_de_perfis() -> dict[str, dict]:
                 "usuario": usuario,
                 "seguidores": int(seguidores.group(1).replace(".", "")) if seguidores else 0,
                 "viral": comentario.strip().lower().startswith(TEMAS_VIRAIS),
+                "tema": re.split(r"[.,]", comentario.strip().lower(), maxsplit=1)[0].strip(),
                 "ingles": "em inglês" in comentario.lower(),
             }
     return saida
@@ -434,9 +435,15 @@ def descobrir_nicho(db, viral: bool) -> bool:
     return True
 
 
+# O /viral só lê founders, VCs e negócios: política e fofoca puxavam os tweets para fora do seu contexto.
+TEMAS_DO_VIRAL = ("startups", "corporativo")
+
+
 def conversa_viral(db) -> str:
-    """Os posts mais relevantes das últimas horas num grupo sorteado das contas virais (10 posts, uns US$ 0,05)."""
-    bloco = sortear_bloco(db, perfis(MIN_SEGUIDORES, viral=True))
+    """Os posts mais relevantes das últimas horas num grupo sorteado de contas de startups e negócios
+    (10 posts, uns US$ 0,05)."""
+    bloco = sortear_bloco(db, [c["usuario"] for c in lista_de_perfis().values()
+                               if c["tema"] in TEMAS_DO_VIRAL and c["seguidores"] >= MIN_SEGUIDORES])
     if not bloco:
         return ""
     try:

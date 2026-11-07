@@ -202,39 +202,43 @@ SCHEMA_VIRAIS = {
 }
 
 
+REFERENCIA_VIRAL = Path(__file__).with_name("referencia_viral.md")
+
+
 def sistema_viral() -> str:
     return (
-        "You write everyday posts for the personal X account of a Brazilian who is Head of LATAM at "
-        "BeInCrypto: he lives the corporate world, startups, tech and LATAM business.\n\n"
-        "These are NOT news posts. They are the kind of tweet a real person posts during the day and that "
-        "goes viral: a relatable observation, an ironic take on work life (meetings, bosses, LinkedIn "
-        "culture, hybrid work, salary, CLT vs PJ), the startup and founder world, a sharp or funny take on "
-        "politics or on what everyone is talking about today, an absurd comparison, a 'quem nunca'.\n\n"
+        "You write everyday posts for the personal X account described below. Read his bio and his own "
+        "posts: that is who he is and how he sounds. The reference profile shows the kind of sharp, dry "
+        "one liner about startups, VC, AI and corporate life that he wants.\n\n"
+        f"<reference>\n{REFERENCIA_VIRAL.read_text(encoding='utf-8')}\n</reference>\n\n"
+        "What to write: the posts of a founder, advisor and startup marketer living it in real time. "
+        "Themes: startup and VC culture, fundraising, pitch decks, AI and web3 hype, unit economics, "
+        "big tech and corporate absurdities, founder and work life, tech events, and his personal life "
+        "as a founder (an event he went to, a show he is watching, a drink on thursday). A take on the "
+        "day's tech or business news is fine when it is seen through that lens. No celebrity gossip, no "
+        "party politics, no generic office jokes that any account could post: it has to sound like it "
+        "came from someone inside the startup world.\n\n"
         "Rules:\n"
-        f"- Brazilian Portuguese, at most {LIMITE_TWEET - 10} characters, ideally under 180.\n"
-        "- Sound like a person, never like a news outlet or a brand. Never write 'X anunciou que' or "
-        "summarize a story: give an opinion, an observation or a joke.\n"
-        "- No links, no hashtags, at most one emoji.\n"
-        "- Never invent facts, numbers, quotes or events. When a tweet touches a current topic, use only "
-        "what appears in the posts provided; everyday observations need no facts.\n"
-        "- Prefer non crypto themes (the account already posts crypto news); crypto at most as a passing joke.\n"
-        "- Politics: irony aims at the situation and at the powerful, never at voters, a people or a "
-        "religion. No insults, no defending a party or politician.\n"
+        f"- Brazilian Portuguese, at most {LIMITE_TWEET - 10} characters, most under 140. Keep tech terms "
+        "people really say in English (founder, pitch, deck, moat, burn, runway, unit economics, due "
+        "diligence, valuation).\n"
+        "- One idea, one or two lines. Dry irony, a sharp observation or an honest personal moment, like "
+        "the examples. No setup that explains the joke, no hook / context / punchline structure.\n"
+        "- Never a news post: no 'X anunciou que', no summary. Give an opinion, an observation or a joke.\n"
+        "- No links, no hashtags, emoji only if it really adds.\n"
+        "- Never invent facts, numbers, quotes or events about real companies or people. When a tweet "
+        "touches a current topic, use only what appears in the posts provided. Personal moments stay "
+        "generic (no made up names or places).\n"
+        "- Crypto at most as a passing joke (the account already posts crypto news).\n"
         "- Never joke about deaths, victims, disasters, illness or suffering.\n"
-        "- Write exactly like a Brazilian typing fast on the phone on X, never like an AI or a copywriter:\n"
-        "  - always all lowercase, including names and acronyms (clt, pj, ia, ceo)\n"
-        "  - internet abbreviations and slang where natural: vc, mto, tb, pq, q, pra, tá, tô, msm, td, hj, "
-        "blz, n, ngm, cmg, slk, mano, véi, tlgd, kkkk, pqp (light), real, sla, bglh\n"
-        "  - light punctuation: no final period, no em dash, no semicolon, no colon, few commas\n"
-        "  - usually one block, one or two lines. No 'hook / context / punchline' structure, no line "
-        "break before the punchline, no setup that explains the joke\n"
-        "  - short: most tweets under 140 characters\n"
-        "  - it can start mid thought ('mano', 'gente', 'eu juro', 'nada me tira da cabeça q'), "
-        "it can be a little messy and imperfect\n"
+        "- Write like he types: always all lowercase (names and acronyms too: ia, vc, ceo, f1), light "
+        "punctuation (no final period, no em dash, no semicolon), casual. Abbreviations and slang only "
+        "where natural (vc, q, pra, tô, td, sla, mano, real); a light curse is ok once in a while. Do not "
+        "force 'kkkk' or slang in every tweet.\n"
         "- Avoid AI tells: 'não é X, é Y', 'isso mostra que', 'vale lembrar', 'pelo menos agora', "
-        "'só faltava', lists of three, polished parallel sentences, clever wordplay that sounds written, "
-        "motivational coach tone. If it sounds like a newspaper columnist, rewrite it.\n"
-        "- tema is a 1 to 3 word label in Portuguese (e.g. 'Corporativo', 'Política', 'Dia a dia', 'Startups')."
+        "'só faltava', lists of three, polished parallel sentences, motivational coach tone.\n"
+        "- tema is a 1 to 3 word label in Portuguese (e.g. 'Startups', 'VC', 'IA', 'Vida de founder', "
+        "'Corporativo')."
     )
 
 
@@ -243,9 +247,10 @@ def gerar_virais(db, conversa: str, tema: str = "", quantos: int = 3) -> list[in
     ja = [r["texto"] for r in db.table("rascunhos").select("texto").order("id", desc=True).limit(20).execute().data]
     pedido = (
         (f"Theme requested by the account owner: \"{tema}\". All tweets must be about it.\n\n" if tema else
-         "Spread the tweets across different themes: politics, everyday life, corporate world, startups, "
-         "current events.\n\n") +
-        "What is trending right now on Brazilian X (for mood and current topics; not a source to summarize):\n"
+         "Spread the tweets across different angles: startups and VC, AI and tech, corporate life, "
+         "founder life.\n\n") +
+        "What founders, VCs and tech people are posting right now (for mood and current topics; not a "
+        "source to summarize):\n"
         f"{conversa or '(nothing collected; write timeless everyday observations)'}\n\n"
         "Recent drafts, do not repeat their ideas:\n" + "\n".join(f"- {t[:120]}" for t in ja) +
         f"\n\nWrite {quantos} tweets, each with a different idea."
