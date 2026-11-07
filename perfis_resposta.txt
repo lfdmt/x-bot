@@ -61,8 +61,47 @@ BeInCrypto_BR  # notícias cripto. 5.123 seguidores
 BanklessBR  # DeFi. 5.020 seguidores
 igormteich  # bitcoin. 4.409 seguidores
 
-# Geopolítica: tudo que tiver "geopolítica" no comentário vai para uma lista separada (🌍), com respostas
-# que às vezes puxam para o humor ou para o viral. "em inglês" no comentário faz a resposta sair em inglês.
+# Virais e atualidades: lista separada (🌎), com respostas que puxam para o humor ou para o viral.
+# Entra aqui toda conta cujo comentário começa por um destes temas: geopolítica, política, dia a dia,
+# corporativo, startups. "em inglês" no comentário faz a resposta sair em inglês.
+# O ranking é por engajamento em relação ao tamanho da conta, então tweet viral passa na frente de notícia.
+
+# Política (dos dois lados, para a lista não pender)
+nikolas_dm  # política. 5.701.215 seguidores
+GuilhermeBoulos  # política. 2.317.676 seguidores
+reinaldoazevedo  # política. Jornalista. 1.643.316 seguidores
+KimKataguiri  # política. 778.723 seguidores
+pablomarcal  # política. 434.827 seguidores
+RenanSantosMBL  # política. Você segue. 257.414 seguidores
+caioblinder  # política. Jornalista. 240.801 seguidores
+JoelPinheiro85  # política. Economista. 175.898 seguidores
+Metropoles  # política. Notícias. 1.760.746 seguidores
+Poder360  # política. Notícias. 163.634 seguidores
+
+# Dia a dia, humor e comportamento
+felipeneto  # dia a dia. 16.000.677 seguidores
+LucianoHuck  # dia a dia. 10.253.115 seguidores
+choquei  # dia a dia. Virais. 9.466.663 seguidores
+HugoGloss  # dia a dia. Entretenimento. 5.798.962 seguidores
+sensacionalista  # dia a dia. Humor. 2.105.619 seguidores
+naosalvo  # dia a dia. Humor. 1.645.555 seguidores
+pedrocertezas  # dia a dia. Humor. 678.137 seguidores
+Prefeitura_Rio  # dia a dia. Humor. Você segue. 443.665 seguidores
+
+# Mundo corporativo e negócios
+GeracaodeValor  # corporativo. Você segue. 643.179 seguidores
+ThiagoNigro  # corporativo. 437.716 seguidores
+exame  # corporativo. Notícias. 2.817.157 seguidores
+epocanegocios  # corporativo. Notícias. 212.859 seguidores
+BrazilJournal  # corporativo. Notícias. 145.187 seguidores
+PedroCerize  # corporativo. Gestor. Você segue. 62.369 seguidores
+
+# Startups e tecnologia
+elonmusk  # startups, em inglês. Você segue. 241.426.109 seguidores
+naval  # startups, em inglês. 4.147.073 seguidores
+levelsio  # startups, em inglês. 990.438 seguidores
+
+# Geopolítica
 gugachacra  # geopolítica. Você segue. 1.547.910 seguidores
 XadrezVerbal  # geopolítica. Filipe Figueiredo. 319.524 seguidores
 arielpalacios  # geopolítica. América Latina. 237.490 seguidores
@@ -70,15 +109,8 @@ JamilChade  # geopolítica. 220.719 seguidores
 OliverStuenkel  # geopolítica. Relações internacionais. 168.059 seguidores
 AnaliseGeopol  # geopolítica. Você segue. 76.883 seguidores
 MatiasSpektor  # geopolítica. Relações internacionais. 20.131 seguidores
-bbcbrasil  # geopolítica. Notícias. 3.386.698 seguidores
-g1mundo  # geopolítica. Notícias. 263.952 seguidores
-folha_mundo  # geopolítica. Notícias. 64.519 seguidores
-EstadaoInter  # geopolítica. Notícias. 44.366 seguidores
-podernaval  # geopolítica. Defesa. 17.506 seguidores
-poderaereo  # geopolítica. Defesa. 14.059 seguidores
 visegrad24  # geopolítica, em inglês. Você segue. 2.123.644 seguidores
 Reuters  # geopolítica, em inglês. Você segue. 26.442.404 seguidores
 spectatorindex  # geopolítica, em inglês. 3.598.788 seguidores
 sentdefender  # geopolítica, em inglês. Conflitos. 2.549.764 seguidores
 Osinttechnical  # geopolítica, em inglês. Conflitos. 1.911.086 seguidores
-Faytuks  # geopolítica, em inglês. 273.499 seguidores
