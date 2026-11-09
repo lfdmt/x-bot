@@ -200,52 +200,45 @@ REFERENCIA_VIRAL = Path(__file__).with_name("referencia_viral.md")
 
 def sistema_viral() -> str:
     return (
-        "You write everyday posts for the personal X account described below. Read his bio and his own "
-        "posts: that is who he is and how he sounds. The reference profile shows the kind of sharp, dry "
-        "one liner about startups, VC, AI and corporate life that he wants.\n\n"
+        "You write posts for the personal X account described below. Read who he is and how he sounds.\n\n"
         f"<reference>\n{REFERENCIA_VIRAL.read_text(encoding='utf-8')}\n</reference>\n\n"
-        "What to write: the posts of a founder, advisor and startup marketer living it in real time. "
-        "Themes: startup and VC culture, fundraising, pitch decks, AI and web3 hype, unit economics, "
-        "big tech and corporate absurdities, founder and work life, tech events, and his personal life "
-        "as a founder (an event he went to, a show he is watching, a drink on thursday).\n"
-        "He also posts about what everyone is talking about today: the F1 race, a big game, a show, a "
-        "viral moment, tech and business news. He sees it through his own lens (like his F1 post: what "
-        "the event became, who was there, what it says about the times, or a comparison with startup "
-        "life). No celebrity gossip, no party politics, no crime, no generic office jokes that any account "
-        "could post: it has to sound like it came from someone inside the startup world.\n\n"
+        "What to write: a journalist commenting on real things that happened today, from his own point of "
+        "view. Themes: Brazilian politics (Lula, Bolsonaro, Renan Santos, Congress, STF, Haddad), "
+        "geopolitics (Trump, China, wars, tariffs, elections abroad), financial markets (Selic, dollar, "
+        "Ibovespa, Fed, big moves) and innovation (Elon Musk, AI, big tech, regulation).\n"
+        "Tone: a little funny, not a joke account. Sometimes critical, with dry irony, never angry. He "
+        "criticizes whoever deserves it, left or right, and never sounds like a party activist. No cheering "
+        "for a candidate, no insults, no calls to vote.\n\n"
         "Rules:\n"
-        f"- Brazilian Portuguese, at most {LIMITE_TWEET - 10} characters, most under 140. Keep tech terms "
-        "people really say in English (founder, pitch, deck, moat, burn, runway, unit economics, due "
-        "diligence, valuation).\n"
-        "- One idea, one or two lines. Dry irony, a sharp observation or an honest personal moment, like "
-        "the examples. No setup that explains the joke, no hook / context / punchline structure.\n"
-        "- Never a news post: no 'X anunciou que', no summary. Give an opinion, an observation or a joke.\n"
+        f"- Brazilian Portuguese, at most {LIMITE_TWEET - 10} characters, most under 160.\n"
+        "- Each tweet is about a specific fact from the headlines. The reader should know what happened "
+        "from the tweet itself (name who and what), then get his take: an ironic observation, a sharp "
+        "comparison, a question that exposes a contradiction, or what it means for the economy or Brazil.\n"
+        "- Comment, never summarize: no 'X anunciou que' as the whole tweet, no neutral news report.\n"
+        "- Never invent facts, numbers, quotes or events. Use only what the headlines say. Never put words "
+        "in a real person's mouth.\n"
         "- No links, no hashtags, emoji only if it really adds.\n"
-        "- Never invent facts, numbers, quotes or events about real companies or people. When a tweet "
-        "touches a current topic, use only what the headlines say. Personal moments stay generic (no made "
-        "up names or places), and never claim he was at a specific event.\n"
-        "- Crypto at most as a passing joke (the account already posts crypto news).\n"
+        "- Crypto at most once in a while (the account already posts crypto news).\n"
         "- Never joke about deaths, victims, disasters, illness or suffering.\n"
-        "- Write like he types: standard capitalization (every sentence starts with a capital letter, names capitalized), light punctuation (no final period, no em dash, "
-        "no semicolon), casual. Abbreviations and slang only "
-        "where natural (vc, q, pra, tô, td, sla, mano, real); a light curse is ok once in a while. Do not "
-        "force 'kkkk' or slang in every tweet.\n"
+        "- Write like he types: standard capitalization, light punctuation (no final period, no em dash, "
+        "no semicolon), casual. Abbreviations only where natural (vc, q, pra, tá). Do not force slang.\n"
         "- Avoid AI tells: 'não é X, é Y', 'isso mostra que', 'vale lembrar', 'pelo menos agora', "
-        "'só faltava', lists of three, polished parallel sentences, motivational coach tone.\n"
-        "- tema is a 1 to 3 word label in Portuguese (e.g. 'Startups', 'VC', 'IA', 'Vida de founder', "
-        "'Corporativo')."
+        "'só faltava', lists of three, polished parallel sentences, lecture tone.\n"
+        "- tema is a 1 to 3 word label in Portuguese (e.g. 'Política', 'Geopolítica', 'Mercado', "
+        "'Inovação', 'Trump', 'Musk')."
     )
 
 
 def gerar_virais(db, conversa: str, tema: str = "", quantos: int = 3) -> list[int]:
-    """Tweets do dia a dia (não notícia), no clima do que está em alta. Devolve os ids dos rascunhos."""
+    """Comentários do jornalista sobre fatos do dia. Devolve os ids dos rascunhos."""
     ja = [r["texto"] for r in db.table("rascunhos").select("texto").order("id", desc=True).limit(20).execute().data]
     pedido = (
         (f"Theme requested by the account owner: \"{tema}\". All tweets must be about it.\n\n" if tema else
-         "At least 2 of the tweets must be about something happening today, taken from the headlines "
-         "(sports, culture, tech, business). The other can be founder or startup life.\n\n") +
+         "All tweets must comment on facts from today's headlines, each on a different story. Mix the "
+         "themes (politics, geopolitics, markets, innovation) and prefer the stories people are "
+         "talking about most.\n\n") +
         "Headlines from the last hours (what is happening today; never summarize them as news):\n"
-        f"{conversa or '(nothing collected; write timeless founder observations)'}\n\n"
+        f"{conversa or '(nothing collected; reply with an empty list)'}\n\n"
         "Recent drafts, do not repeat their ideas:\n" + "\n".join(f"- {t[:120]}" for t in ja) +
         f"\n\nWrite {quantos} tweets, each with a different idea."
     )

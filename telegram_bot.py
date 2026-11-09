@@ -158,8 +158,8 @@ def salvar_offset(db, offset: int):
 AVISO_PEDIDO = "⏳ Recebi o link. As 3 opções de resposta chegam aqui em alguns minutos."
 AJUDA = ("Comandos:\n"
          "• /gerar: busca notícias e gera rascunhos agora\n"
-         "• /viral: 3 tweets do dia a dia (política, corporativo, startups, atualidades), no clima do que "
-         "está em alta. /viral seguido de um tema foca nele\n"
+         "• /viral: 3 comentários seus sobre notícias do dia (política, geopolítica, mercado, inovação)"
+         ". /viral seguido de um tema foca nele\n"
          "• /atualidades: assuntos do momento no Brasil, para tweetar sobre eles\n"
          "• /respostas: posts em alta nas contas do seu nicho, para escolher quais responder (chega sozinho nos picos)\n"
          "• /linkedin: post do LinkedIn com a melhor notícia do dia. /linkedin seguido de um tema usa a sua pauta\n"
@@ -385,7 +385,7 @@ def enviar_pendentes(db):
 # Menu de comandos do bot (botão "/" ao lado do campo de texto). Depois de mudar, rode
 # `python telegram_bot.py --menu` uma vez.
 MENU = [
-    ("viral", "3 tweets do dia a dia. /viral tema foca num assunto"),
+    ("viral", "3 comentários sobre notícias do dia. /viral tema foca num assunto"),
     ("gerar", "Busca notícias e gera rascunhos agora"),
     ("atualidades", "Assuntos do momento no Brasil"),
     ("respostas", "Posts em alta para responder"),

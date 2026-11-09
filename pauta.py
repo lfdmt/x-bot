@@ -42,23 +42,23 @@ def manchetes() -> list[dict]:
     return itens
 
 
-# O que está rolando no dia, para o /viral: esporte, cultura, tecnologia e negócios. RSS, sem custo.
+# O que está rolando no dia, para o /viral: política, geopolítica, mercado e inovação. RSS, sem custo.
 DIA_A_DIA = [
-    ("ge F1", "https://ge.globo.com/rss/ge/motor/formula-1/", 8),
-    ("ge", "https://ge.globo.com/rss/ge/", 10),
-    ("g1", "https://g1.globo.com/rss/g1/", 10),
-    ("g1 Pop", "https://g1.globo.com/rss/g1/pop-arte/", 6),
-    ("g1 Tecnologia", "https://g1.globo.com/rss/g1/tecnologia/", 6),
-    ("NeoFeed", "https://neofeed.com.br/feed/", 6),
-    ("Brazil Journal", "https://braziljournal.com/feed/", 4),
-    ("Exame", "https://exame.com/feed/", 8),
-    ("TechCrunch", "https://techcrunch.com/feed/", 8),
-    ("The Verge", "https://www.theverge.com/rss/index.xml", 6),
+    ("g1 Política", "https://g1.globo.com/rss/g1/politica/", 10),
+    ("Poder360", "https://www.poder360.com.br/feed/", 10),
+    ("Folha", "https://feeds.folha.uol.com.br/emcimadahora/rss091.xml", 10),
+    ("g1 Mundo", "https://g1.globo.com/rss/g1/mundo/", 8),
+    ("BBC Brasil", "https://feeds.bbci.co.uk/portuguese/rss.xml", 8),
+    ("InfoMoney", "https://www.infomoney.com.br/feed/", 10),
+    ("g1 Economia", "https://g1.globo.com/rss/g1/economia/", 6),
+    ("NeoFeed", "https://neofeed.com.br/feed/", 4),
+    ("g1 Tecnologia", "https://g1.globo.com/rss/g1/tecnologia/", 5),
+    ("TechCrunch", "https://techcrunch.com/feed/", 5),
 ]
 
 
 def manchetes_do_dia(horas: int = 18) -> str:
-    """Manchetes recentes de esporte, cultura, tecnologia e negócios, uma por linha."""
+    """Manchetes recentes de política, geopolítica, mercado e inovação, uma por linha."""
     limite = datetime.now(timezone.utc) - timedelta(hours=horas)
     linhas = []
     for portal, url, maximo in DIA_A_DIA:
