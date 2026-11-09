@@ -251,8 +251,7 @@ def sistema(ingles: bool = False, viral: bool = False) -> str:
         "- Add something to the conversation. No empty praise ('great post'), no self promotion.\n"
         "- angulo is always a 1 to 3 word label in Portuguese (e.g. "
         + ("'Humor', 'Viral', 'Visão própria'" if viral else "'Visão LATAM', 'Contraponto', 'Pergunta'") + ").\n"
-        "- Sound like a real person typing fast on the phone, never like an AI. Always all lowercase, "
-        "including names, tickers and acronyms (btc, etf). Use internet abbreviations where natural: "
+        "- Sound like a real person typing fast on the phone, never like an AI. Standard capitalization (sentences start with a capital letter). Use internet abbreviations where natural: "
         f"{abreviacoes}. Light punctuation: no final period, no em dash, "
         "no semicolon, no colon. Short, usually under 160 characters, one or two sentences.\n"
         "- Avoid AI tells: 'não é X, é Y', 'isso mostra que', 'vale lembrar', 'em suma', 'o ponto é', "
@@ -261,9 +260,8 @@ def sistema(ingles: bool = False, viral: bool = False) -> str:
 
 
 def casual(texto: str) -> str:
-    """Garante o tom digitado no celular: tudo em minúsculas (menos @ e links), sem travessão nem ponto final."""
-    from gerador import minusculas
-    return minusculas(texto.replace(" — ", ", ").replace(" – ", ", ").replace("—", ",")).strip().rstrip(".")
+    """Garante o tom digitado no celular: sem travessão nem ponto final. A caixa das letras fica como veio."""
+    return texto.replace(" — ", ", ").replace(" – ", ", ").replace("—", ",").strip().rstrip(".")
 
 
 def responder(db, tweet_id: str, autor_link: str):

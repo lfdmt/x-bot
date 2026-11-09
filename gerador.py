@@ -52,7 +52,6 @@ def system_prompt() -> str:
         f"<format_reference>\n{REFERENCIA.read_text(encoding='utf-8')}\n</format_reference>\n\n"
         "Rules for every post:\n"
         f"- Brazilian Portuguese only, at most {LIMITE_TWEET - 10} characters.\n"
-        "- Always all lowercase, including the first letter, names, acronyms and tickers (btc, etf, sec).\n"
         "- No links or URLs, and do not tell readers to click or read the article: the post stands alone.\n"
         "- Sources come in Portuguese, Spanish or English: news articles, market data, or posts from @beincrypto. "
         "Always write in Portuguese, in your own words; never translate a source post line by line.\n"
@@ -114,12 +113,6 @@ def resolver_midia(fonte: dict, formato: str, saida: dict) -> tuple[str | None, 
         return None, None
 
 
-def minusculas(texto: str) -> str:
-    """Tudo em minúsculas, inclusive siglas e tickers. Só @ e links ficam como estão."""
-    return "\n".join(" ".join(p if p.startswith(("@", "http")) else p.lower() for p in linha.split(" "))
-                     for linha in texto.split("\n"))
-
-
 def claude_json(pedido: str, sistema: str, schema: dict) -> dict | None:
     """Chama o Claude pela assinatura (`claude -p`) e devolve a saída validada pelo schema."""
     # Sem ANTHROPIC_API_KEY no ambiente, o claude usa a assinatura e não a API paga.
@@ -178,7 +171,7 @@ def gerar_pedido(db, instrucao: str, origem: str = "pedido seu no Telegram") -> 
     fonte = {"tipo": "noticia", "url": "", "imagem_url": None}
     midia_tipo, midia_urls = resolver_midia(fonte, formato, saida)
     linha = db.table("rascunhos").insert({
-        "texto": minusculas(saida["tweet"].strip()), "link": origem, "status": "pendente",
+        "texto": saida["tweet"].strip(), "link": origem, "status": "pendente",
         "midia_tipo": midia_tipo, "midia_urls": midia_urls,
     }).execute().data
     return linha[0]["id"] if linha else None
@@ -233,8 +226,8 @@ def sistema_viral() -> str:
         "up names or places), and never claim he was at a specific event.\n"
         "- Crypto at most as a passing joke (the account already posts crypto news).\n"
         "- Never joke about deaths, victims, disasters, illness or suffering.\n"
-        "- Write like he types: always all lowercase (names and acronyms too: ia, vc, ceo, f1), light "
-        "punctuation (no final period, no em dash, no semicolon), casual. Abbreviations and slang only "
+        "- Write like he types: standard capitalization (every sentence starts with a capital letter, names capitalized), light punctuation (no final period, no em dash, "
+        "no semicolon), casual. Abbreviations and slang only "
         "where natural (vc, q, pra, tô, td, sla, mano, real); a light curse is ok once in a while. Do not "
         "force 'kkkk' or slang in every tweet.\n"
         "- Avoid AI tells: 'não é X, é Y', 'isso mostra que', 'vale lembrar', 'pelo menos agora', "
@@ -260,7 +253,7 @@ def gerar_virais(db, conversa: str, tema: str = "", quantos: int = 3) -> list[in
     ids = []
     for t in saida.get("tweets", [])[:quantos]:
         from respostas import casual
-        texto = casual(t["tweet"].strip())
+        texto = casual(t["tweet"].strip())  # só tira travessão e ponto final
         if not texto or len(texto) > LIMITE_TWEET:
             continue
         linha = db.table("rascunhos").insert({
@@ -307,7 +300,7 @@ def main():
         if not saida or not saida["publicar"]:
             print(f"[gerador] pulado ({saida and saida['motivo']}): {fonte['titulo']}")
             continue
-        tweet = minusculas(saida["tweet"].strip())
+        tweet = saida["tweet"].strip()
         if len(tweet) > LIMITE_TWEET:
             print(f"[gerador] tweet com {len(tweet)} caracteres, descartado: {fonte['titulo']}")
             continue
