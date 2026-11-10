@@ -20,6 +20,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote
 
+import requests
 import tweepy
 
 from config import supabase
@@ -264,19 +265,49 @@ def casual(texto: str) -> str:
     return texto.replace(" — ", ", ").replace(" – ", ", ").replace("—", ",").strip().rstrip(".")
 
 
-def responder(db, tweet_id: str, autor_link: str):
+def ler_post_gratis(tweet_id: str) -> tuple[str, str, bool] | None:
+    """Lê o post pelo endpoint público de embed do X, sem gastar crédito da API.
+    Devolve (usuario, texto, tem_midia) ou None se não deu."""
     try:
-        resp = cliente_x().get_tweet(tweet_id, user_auth=True, expansions=["author_id"],
-                                     tweet_fields=["note_tweet"], user_fields=["username"])
-    except tweepy.TweepyException as e:
-        tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Não consegui ler o post {tweet_id}: {e}")
+        r = requests.get("https://cdn.syndication.twimg.com/tweet-result",
+                         params={"id": tweet_id, "token": "a"}, timeout=15,
+                         headers={"User-Agent": "Mozilla/5.0 (x-bot)"})
+        d = r.json() if r.ok and r.content else None
+    except (requests.RequestException, ValueError):
+        return None
+    if not d or d.get("__typename") != "Tweet":
+        return None
+    usuario = (d.get("user") or {}).get("screen_name") or ""
+    texto = (d.get("note_tweet") or {}).get("note_tweet_results", {}).get("result", {}).get("text") or d.get("text", "")
+    texto = re.sub(r"https://t\.co/\S+", "", texto).strip()
+    return usuario, texto, bool(d.get("mediaDetails"))
+
+
+def responder(db, tweet_id: str, autor_link: str):
+    # Primeiro o caminho grátis; a API (paga por leitura) só se ele falhar.
+    gratis = ler_post_gratis(tweet_id)
+    if gratis:
+        usuario, texto, tem_midia = gratis
+        usuario = usuario or autor_link
+    else:
+        try:
+            resp = cliente_x().get_tweet(tweet_id, user_auth=True, expansions=["author_id"],
+                                         tweet_fields=["note_tweet"], user_fields=["username"])
+        except tweepy.TweepyException as e:
+            tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Não consegui ler o post {tweet_id}: {e}")
+            return
+        if not resp.data:
+            tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ O post {tweet_id} não existe mais ou é privado.")
+            return
+        autor = (resp.includes or {}).get("users", [None])[0]
+        usuario = autor.username if autor else autor_link
+        texto = (resp.data.data.get("note_tweet") or {}).get("text") or resp.data.text
+        texto, tem_midia = re.sub(r"https://t\.co/\S+", "", texto).strip(), False
+    if not texto:
+        tg("sendMessage", chat_id=CHAT_ID, text=(
+            f"⚠️ O post de @{usuario} é só {'imagem ou vídeo' if tem_midia else 'link'}, sem texto, "
+            "e eu não consigo ver o conteúdo para sugerir respostas."))
         return
-    if not resp.data:
-        tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ O post {tweet_id} não existe mais ou é privado.")
-        return
-    autor = (resp.includes or {}).get("users", [None])[0]
-    usuario = autor.username if autor else autor_link
-    texto = (resp.data.data.get("note_tweet") or {}).get("text") or resp.data.text
     sugerir(tweet_id, usuario, texto)
 
 
