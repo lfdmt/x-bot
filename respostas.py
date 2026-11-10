@@ -308,6 +308,8 @@ def responder(db, tweet_id: str, autor_link: str):
             f"⚠️ O post de @{usuario} é só {'imagem ou vídeo' if tem_midia else 'link'}, sem texto, "
             "e eu não consigo ver o conteúdo para sugerir respostas."))
         return
+    from seguir import lembrar_autor
+    lembrar_autor(db, usuario)
     sugerir(tweet_id, usuario, texto)
 
 
@@ -501,8 +503,7 @@ def main():
     if "--checar" in sys.argv:
         tem = bool(pendentes or pedidos_de_tweet(db) or
                    db.table("bot_estado").select("chave").like("chave", "pedido_a%").execute().data or
-                   db.table("bot_estado").select("chave").like("chave", "pedido_viral:%").execute().data or
-                   db.table("bot_estado").select("chave").like("chave", "pedido_linkedin:%").execute().data)
+                   db.table("bot_estado").select("chave").like("chave", "pedido_viral:%").execute().data)
         saida = os.getenv("GITHUB_OUTPUT")
         if saida:
             with open(saida, "a") as f:
@@ -513,8 +514,6 @@ def main():
     atender_assuntos(db)
     atender_pedidos_de_tweet(db)
     atender_virais(db)
-    from linkedin import atender_pedidos as atender_linkedin
-    atender_linkedin(db)
     for tweet_id in pendentes:
         valor = db.table("bot_estado").select("valor").eq("chave", f"pedido_resposta:{tweet_id}").execute().data
         db.table("bot_estado").delete().eq("chave", f"pedido_resposta:{tweet_id}").execute()

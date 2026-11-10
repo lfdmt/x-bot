@@ -174,8 +174,7 @@ AJUDA = ("Comandos:\n"
          ". /viral seguido de um tema foca nele\n"
          "• /atualidades: assuntos do momento no Brasil, para tweetar sobre eles\n"
          "• /respostas: abre seu feed no X; mande o link do post que quer responder\n"
-         "• /linkedin: post do LinkedIn com a melhor notícia do dia. /linkedin seguido de um tema usa a sua pauta\n"
-         "• /exemplo seguido de um post seu do LinkedIn: o bot aprende o seu jeito de escrever\n"
+         "• /seguir: 5 contas para seguir, com chance de seguirem de volta\n"
          "• Escreva o que quer tweetar (ex.: \"tweet sobre o hack do Mercado Bitcoin e a confiança nas "
          "exchanges brasileiras\") e eu faço o rascunho\n"
          "• Cole o link de um post do X para receber 3 sugestões de resposta\n"
@@ -343,22 +342,11 @@ def tratar_atualizacao(db, u: dict):
             tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
                text="⏳ Escrevendo 3 tweets do dia a dia" + (f" sobre {tema}" if tema else "") +
                ". Chegam aqui em 2 a 3 minutos.")
-        elif texto.lower().startswith("/exemplo"):
-            post = texto[len("/exemplo"):].strip()
-            if len(post) < 80:
-                tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
-                   text="Mande /exemplo seguido do texto completo de um post seu do LinkedIn.")
-                return
-            db.table("bot_estado").upsert({"chave": f"linkedin_exemplo:{msg['message_id']}", "valor": post}).execute()
-            total = len(db.table("bot_estado").select("chave").like("chave", "linkedin_exemplo:%").execute().data)
-            tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
-               text=f"✅ Guardei. Agora são {total} posts seus de exemplo (uso os 8 mais recentes).")
-        elif texto.lower().startswith("/linkedin"):
-            pauta = texto[len("/linkedin"):].strip()
-            db.table("bot_estado").upsert({"chave": f"pedido_linkedin:{msg['message_id']}", "valor": pauta}).execute()
-            disparar("respostas.yml")
-            tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
-               text="⏳ Escrevendo o post do LinkedIn. Chega aqui em 2 a 3 minutos.")
+        elif texto.lower().startswith("/seguir"):
+            from seguir import sugerir
+            texto_seguir, teclado = sugerir(db)
+            extra = {"reply_markup": teclado} if teclado else {}
+            tg("sendMessage", chat_id=CHAT_ID, text=texto_seguir, disable_web_page_preview=True, **extra)
         elif texto.lower().startswith("/gerar"):
             disparar("coletar-gerar.yml")
             tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
@@ -419,8 +407,7 @@ MENU = [
     ("gerar", "Busca notícias e gera rascunhos agora"),
     ("atualidades", "Assuntos do momento no Brasil"),
     ("respostas", "Abrir meu feed para escolher o que responder"),
-    ("linkedin", "Post do LinkedIn. /linkedin tema usa a sua pauta"),
-    ("exemplo", "Ensina o seu jeito de escrever no LinkedIn"),
+    ("seguir", "5 contas para seguir, com chance de seguirem de volta"),
 ]
 
 

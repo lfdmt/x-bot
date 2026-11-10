@@ -1,0 +1,51 @@
+# Contas para o /seguir: o bot sugere 5 por vez, nunca repete. Um @ por linha (sem o @).
+# Contas pequenas e médias seguem de volta mais. Responder um post da pessoa antes de seguir ajuda.
+# Os autores dos posts que você responde pelo bot entram sozinhos, na frente desta lista.
+# Apague ou acrescente à vontade; linhas com # são ignoradas.
+
+# Política e análise (a conferir: o @ existe, mas confira se é a pessoa certa e o tamanho)
+thomastraumann  # política. Analista político
+CarlosPereira_  # política. Cientista político
+ClaudioCouto  # política. Cientista político, FGV
+felipenunes  # política. Pesquisas, Quaest
+conradohubner  # política. Direito constitucional, STF
+igorgadelha  # política. Colunista Metrópoles
+brunoboghossian  # política. Colunista Folha
+vinicius_torres  # economia e política. Colunista Folha
+
+# Economia e mercado
+sergiovale  # economia. Economista
+alexschwartsman  # economia. Economista
+AlexWolwacz  # economia. 15.658 seguidores
+MHPaz  # investimentos. 13.521 seguidores
+FaustoBotelho  # análise técnica. 14.069 seguidores
+diegovelasques4  # trading. 16.480 seguidores
+mcmanocall  # trading. 11.239 seguidores
+
+# Inovação e tecnologia
+pedroburgos  # tecnologia. Jornalista
+FalaTerranova  # startups. 6.612 seguidores
+
+# Geopolítica
+MatiasSpektor  # geopolítica. Relações internacionais. 20.131 seguidores
+
+# Cripto
+KoreaComK  # bitcoin. 28.301 seguidores
+diegokolling  # bitcoin. 23.116 seguidores
+ojedabtc  # bitcoin. 19.416 seguidores
+orlandooncrypto  # cripto. 19.413 seguidores
+Investidor420  # cripto. 19.317 seguidores
+rodcacioli  # negócios cripto. 17.526 seguidores
+debinvest  # cripto. 15.108 seguidores
+DanielLCDuarte  # cripto. 13.252 seguidores
+FelippePercigo  # cripto. 11.775 seguidores
+cioffi_victor  # stablecoin. 11.513 seguidores
+declarandobtc  # tributação cripto. 11.019 seguidores
+Ojadernogueira  # cripto. 9.802 seguidores
+kakafurlan  # bitcoin. 8.747 seguidores
+rodrigoteich  # cripto. 8.167 seguidores
+danimimm  # cripto. 6.479 seguidores
+joaopkury  # cripto. 6.197 seguidores
+igormteich  # bitcoin. 4.409 seguidores
+caueconomy  # bitcoin. 33.440 seguidores
+carol_bitcoin  # bitcoin. 32.901 seguidores

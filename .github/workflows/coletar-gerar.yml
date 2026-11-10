@@ -40,4 +40,3 @@ jobs:
       - run: python coletor.py
       - run: python gerador.py
       - run: python telegram_bot.py   # manda os rascunhos novos na hora
-      - run: python linkedin.py --diario   # um post de LinkedIn por dia, a partir das 7h
