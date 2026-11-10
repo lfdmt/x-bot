@@ -174,7 +174,7 @@ AJUDA = ("Comandos:\n"
          ". /viral seguido de um tema foca nele\n"
          "• /atualidades: assuntos do momento no Brasil, para tweetar sobre eles\n"
          "• /respostas: abre seu feed no X; mande o link do post que quer responder\n"
-         "• /seguir: 5 contas para seguir, com chance de seguirem de volta\n"
+         "• /seguir: 5 contas para seguir, com chance de seguirem de volta. /seguir buscar enche a lista (pago, uns US$ 0,75)\n"
          "• Escreva o que quer tweetar (ex.: \"tweet sobre o hack do Mercado Bitcoin e a confiança nas "
          "exchanges brasileiras\") e eu faço o rascunho\n"
          "• Cole o link de um post do X para receber 3 sugestões de resposta\n"
@@ -352,7 +352,16 @@ def tratar_atualizacao(db, u: dict):
                text="⏳ Escrevendo 3 tweets do dia a dia" + (f" sobre {tema}" if tema else "") +
                ". Chegam aqui em 2 a 3 minutos.")
         elif texto.lower().startswith("/seguir"):
-            from seguir import sugerir
+            from seguir import buscar, sugerir
+            if "buscar" in texto.lower():
+                from respostas import SemCredito
+                try:
+                    novas = buscar(db)
+                except SemCredito:
+                    tg("sendMessage", chat_id=CHAT_ID, text="⚠️ A API do X está sem crédito. Recarregue em "
+                       "console.x.com e mande /seguir buscar de novo.")
+                    return
+                tg("sendMessage", chat_id=CHAT_ID, text=f"🔎 {novas} contas novas na lista.")
             texto_seguir, teclado = sugerir(db)
             extra = {"reply_markup": teclado} if teclado else {}
             tg("sendMessage", chat_id=CHAT_ID, text=texto_seguir, disable_web_page_preview=True, **extra)
