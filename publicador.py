@@ -82,8 +82,24 @@ def proximo_horario_bom(db) -> datetime | None:
     return None
 
 
+def lembrar_de_postar(db, r: dict) -> None:
+    """Modo grátis: em vez de postar pela API (paga), manda o tweet com o botão que abre o X já escrito."""
+    from telegram_bot import CHAT_ID, manual, tg
+
+    db.table("rascunhos").update({"status": "pendente"}).eq("id", r["id"]).execute()
+    db.table("bot_estado").delete().eq("chave", f"agendar:{r['id']}").execute()
+    tg("sendMessage", chat_id=CHAT_ID, disable_web_page_preview=True,
+       text=f"⏰ Hora de postar o rascunho #{r['id']}:\n\n{r['texto']}"
+            + ("\n\n(Tem imagem: salve a do rascunho e anexe no X.)" if r.get("midia_urls") else ""),
+       reply_markup={"inline_keyboard": [manual(r)]})
+    return None
+
+
 def publicar_um(db, r: dict) -> str | None:
     """Publica um rascunho. Devolve o link do tweet, ou None se falhou ou se está em modo de teste."""
+    from config import x_gratis
+    if x_gratis():
+        return lembrar_de_postar(db, r)
     if DRY_RUN:
         print(f"[publicador] MODO TESTE, não postado:\n  tweet: {r['texto']}\n"
               f"  mídia: {', '.join(r.get('midia_urls') or []) or 'nenhuma'}")

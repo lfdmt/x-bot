@@ -52,9 +52,8 @@ def sugerir(db) -> tuple[str, dict | None]:
         if len(escolhidas) == POR_VEZ:
             break
     if not escolhidas:
-        return ("Ainda não tenho contas novas para sugerir. Mande /seguir buscar: o bot acha quem anda "
-                "respondendo as contas do seu nicho (contas reais e ativas). Usa a API do X, uns US$ 0,75 "
-                "por busca."), None
+        return ("Ainda não tenho contas novas para sugerir. Cada post que você responde pelo bot (cole o "
+                "link aqui) coloca o autor na lista, se você ainda não segue."), None
     agora = datetime.now(timezone.utc).isoformat()
     for usuario, _ in escolhidas:
         db.table("bot_estado").upsert({"chave": f"seguir_sugerido:{usuario.lower()}", "valor": agora}).execute()
@@ -82,7 +81,11 @@ def buscar(db) -> int:
     import tweepy
 
     from publicador import cliente_x
+    from config import x_gratis
     from respostas import SemCredito, lista_de_perfis
+
+    if x_gratis():
+        raise SemCredito()
 
     fontes = [c["usuario"] for c in lista_de_perfis().values()
               if not c.get("ingles") and 5000 <= c["seguidores"] <= 400000]

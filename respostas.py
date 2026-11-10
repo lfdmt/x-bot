@@ -77,6 +77,9 @@ PALAVRAS_VAZIAS = {"the", "a", "an", "of", "in", "on", "to", "for", "and", "as",
 
 def posts_em_portugues(consulta: str) -> list[str]:
     """Até 10 posts recentes e relevantes em português sobre o assunto: a conversa no X Brasil."""
+    from config import x_gratis
+    if x_gratis():
+        return []
     try:
         resp = cliente_x().search_recent_tweets(
             f"{consulta} lang:pt -is:retweet -is:reply", max_results=10, sort_order="relevancy",
@@ -113,6 +116,9 @@ def montar_atualidades(db):
 
 def posts_sobre(assunto: str) -> list[str]:
     """Até 10 posts recentes e relevantes sobre o assunto, como fonte de fatos."""
+    from config import x_gratis
+    if x_gratis():
+        return []
     # Sem "$": na busca do X, "$12.8" vira filtro de cashtag e traz posts de outro assunto.
     termos = [t.strip(".") for t in re.findall(r"[\w.]+", assunto.replace("$", " "))
               if t.lower() not in PALAVRAS_VAZIAS and len(t.strip(".")) > 1]
@@ -286,6 +292,11 @@ def ler_post_gratis(tweet_id: str) -> tuple[str, str, bool] | None:
 def responder(db, tweet_id: str, autor_link: str):
     # Primeiro o caminho grátis; a API (paga por leitura) só se ele falhar.
     gratis = ler_post_gratis(tweet_id)
+    from config import x_gratis
+    if not gratis and x_gratis():
+        tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Não consegui ler o post {tweet_id} pelo caminho grátis. "
+           "Ele pode ser privado ou ter sido apagado.")
+        return
     if gratis:
         usuario, texto, tem_midia = gratis
         usuario = usuario or autor_link
@@ -415,6 +426,9 @@ def descobrir_nicho(db, viral: bool) -> bool:
     as médias competirem com as grandes, e entra no máximo um post por conta. As sugestões de resposta
     só são escritas para o post que você escolher no botão.
     """
+    from config import x_gratis
+    if x_gratis():
+        raise SemCredito()
     contas = lista_de_perfis()
     bloco = sortear_bloco(db, perfis(MIN_SEGUIDORES, viral))
     if not bloco:

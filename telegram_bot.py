@@ -67,6 +67,14 @@ def botoes(r: dict) -> dict:
     segunda = [{"text": "🗑 Descartar", "callback_data": f"descartar:{r['id']}"}]
     if r.get("midia_urls"):
         segunda.append({"text": "🚫 Sem mídia", "callback_data": f"semmidia:{r['id']}"})
+    from config import x_gratis
+    if x_gratis():  # postar pela API é pago: você posta pelo botão, e o agendar vira lembrete
+        return {"inline_keyboard": [
+            manual(r),
+            [{"text": "⏰ Lembrar em 30 min", "callback_data": f"em30:{r['id']}"},
+             {"text": "🕐 Lembrar no horário bom", "callback_data": f"bom:{r['id']}"}],
+            segunda,
+        ]}
     return {"inline_keyboard": [
         [{"text": "🚀 Postar agora", "callback_data": f"agora:{r['id']}"},
          {"text": "⏰ Em 30 min", "callback_data": f"em30:{r['id']}"}],
@@ -148,7 +156,11 @@ def agendar_para(db, r: dict, message_id: int, quando: datetime):
     extra = ""
     if local.date() != datetime.now(BRASILIA).date() and dia_cheio(db, datetime.now(timezone.utc)):
         extra = f"\nHoje já tem {LIMITE_DIARIO} posts, por isso foi para o próximo dia."
-    confirmar(message_id, f"⏰ Agendado: rascunho #{r['id']} sai {dia} às {local:%H:%M}.{extra}")
+    from config import x_gratis
+    if x_gratis():
+        confirmar(message_id, f"⏰ Lembrete: {dia} às {local:%H:%M} eu mando o rascunho #{r['id']} pronto para postar.")
+    else:
+        confirmar(message_id, f"⏰ Agendado: rascunho #{r['id']} sai {dia} às {local:%H:%M}.{extra}")
 
 
 def corpo(r: dict) -> str:
@@ -174,7 +186,7 @@ AJUDA = ("Comandos:\n"
          ". /viral seguido de um tema foca nele\n"
          "• /atualidades: assuntos do momento no Brasil, para tweetar sobre eles\n"
          "• /respostas: abre seu feed no X; mande o link do post que quer responder\n"
-         "• /seguir: 5 contas para seguir, com chance de seguirem de volta. /seguir buscar enche a lista (pago, uns US$ 0,75)\n"
+         "• /seguir: 5 contas para seguir, com chance de seguirem de volta.\n"
          "• Escreva o que quer tweetar (ex.: \"tweet sobre o hack do Mercado Bitcoin e a confiança nas "
          "exchanges brasileiras\") e eu faço o rascunho\n"
          "• Cole o link de um post do X para receber 3 sugestões de resposta\n"
@@ -335,7 +347,7 @@ def tratar_atualizacao(db, u: dict):
                     achou = descobrir(db)
                 except SemCredito:
                     achou = False
-                    tg("sendMessage", chat_id=CHAT_ID, text="⚠️ A API do X está sem crédito.")
+                    tg("sendMessage", chat_id=CHAT_ID, text="⚠️ Busca paga desligada (modo grátis). Mande só /respostas.")
                 if not achou:
                     tg("sendMessage", chat_id=CHAT_ID, text="Nenhum post em alta veio da busca agora.")
             else:
@@ -358,8 +370,8 @@ def tratar_atualizacao(db, u: dict):
                 try:
                     novas = buscar(db)
                 except SemCredito:
-                    tg("sendMessage", chat_id=CHAT_ID, text="⚠️ A API do X está sem crédito. Recarregue em "
-                       "console.x.com e mande /seguir buscar de novo.")
+                    tg("sendMessage", chat_id=CHAT_ID, text="⚠️ Essa busca usa a API paga do X, e o bot está no modo grátis. "
+                       "As sugestões vêm dos autores dos posts que você responde.")
                     return
                 tg("sendMessage", chat_id=CHAT_ID, text=f"🔎 {novas} contas novas na lista.")
             texto_seguir, teclado = sugerir(db)

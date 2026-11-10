@@ -131,7 +131,8 @@ def coletar_mercado() -> list[dict]:
 
 
 def coletar_x(db) -> list[dict]:
-    if os.getenv("COLETAR_X", "false").lower() != "true" or not os.getenv("X_ACCESS_TOKEN"):
+    from config import x_gratis
+    if x_gratis() or os.getenv("COLETAR_X", "false").lower() != "true" or not os.getenv("X_ACCESS_TOKEN"):
         return []
     from publicador import cliente_x
 

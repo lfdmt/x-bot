@@ -31,6 +31,11 @@ ATIVOS = {
 }
 
 
+def x_gratis() -> bool:
+    """Modo grátis (padrão): nada chama a API paga do X. Para religar, X_GRATIS=false."""
+    return os.getenv("X_GRATIS", "true").lower() != "false"
+
+
 def env(name: str, default: str | None = None) -> str:
     value = os.getenv(name, default)
     if value is None or value == "":

@@ -146,7 +146,8 @@ def logos_do_x(perfis: list[str]) -> list[bytes]:
     fotos = {l["chave"].split(":", 1)[1]: l["valor"] for l in
              db.table("bot_estado").select("chave,valor").in_("chave", [f"foto_x:{p.lower()}" for p in perfis]).execute().data}
     faltam = [p for p in perfis if p.lower() not in fotos]
-    if faltam:  # ler perfil no X é pago: cada conta só é consultada uma vez
+    from config import x_gratis
+    if faltam and not x_gratis():  # ler perfil no X é pago: cada conta só é consultada uma vez
         resp = cliente_x().get_users(usernames=faltam, user_fields=["profile_image_url"], user_auth=True)
         for u in resp.data or []:
             fotos[u.username.lower()] = (u.profile_image_url or "").replace("_normal", "_400x400")
