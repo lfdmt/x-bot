@@ -11,6 +11,7 @@ load_dotenv()
 FEEDS = [
     ("BeInCrypto Brasil", "pt", "https://br.beincrypto.com/feed/"),
     ("BeInCrypto Español", "es", "https://es.beincrypto.com/feed/"),
+    ("BeInCrypto", "en", "https://beincrypto.com/feed/"),  # no lugar de ler o @beincrypto pela API paga
     ("Livecoins", "pt", "https://livecoins.com.br/feed/"),
     ("Portal do Bitcoin", "pt", "https://portaldobitcoin.uol.com.br/feed/"),
     ("CoinDesk", "en", "https://www.coindesk.com/arc/outboundfeeds/rss/"),

@@ -422,15 +422,13 @@ def descobrir_nicho(db, viral: bool) -> bool:
     try:
         resp = cliente_x().search_recent_tweets(
             consulta, max_results=10, start_time=agora - JANELA_ALTA, user_auth=True, sort_order="relevancy",
-            tweet_fields=["public_metrics", "note_tweet", "author_id", "created_at"],
-            expansions=["author_id"], user_fields=["username"],
+            tweet_fields=["public_metrics", "note_tweet", "created_at"],
         )
     except tweepy.TweepyException as e:
         print(f"[respostas] busca falhou: {e}")
         if "402" in str(e) or "credits" in str(e).lower():
             raise SemCredito() from e
         return False
-    nomes = {u.id: u.username for u in (resp.includes or {}).get("users", [])}
     ja = {l["chave"].split(":", 1)[1] for l in
           db.table("bot_estado").select("chave").like("chave", "sugerido:%").execute().data}
     candidatos = []
@@ -439,7 +437,7 @@ def descobrir_nicho(db, viral: bool) -> bool:
             continue
         m = post.public_metrics
         candidatos.append({
-            "id": str(post.id), "usuario": nomes.get(post.author_id, "?"),
+            "id": str(post.id), "usuario": (ler_post_gratis(str(post.id)) or ("?",))[0] or "?",
             "texto": (post.data.get("note_tweet") or {}).get("text") or post.text,
             "horas": max(0, int((agora - post.created_at).total_seconds() // 3600)),
             "pontos": m["like_count"] + 2 * m["retweet_count"] + 3 * m["reply_count"] + 2 * m["quote_count"],

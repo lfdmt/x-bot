@@ -140,10 +140,20 @@ def logos_do_x(perfis: list[str]) -> list[bytes]:
     perfis = [p.lstrip("@").strip() for p in perfis if p.strip()][:2]
     if not perfis:
         return []
-    resp = cliente_x().get_users(usernames=perfis, user_fields=["profile_image_url"], user_auth=True)
+    from config import supabase
+
+    db = supabase()
+    fotos = {l["chave"].split(":", 1)[1]: l["valor"] for l in
+             db.table("bot_estado").select("chave,valor").in_("chave", [f"foto_x:{p.lower()}" for p in perfis]).execute().data}
+    faltam = [p for p in perfis if p.lower() not in fotos]
+    if faltam:  # ler perfil no X é pago: cada conta só é consultada uma vez
+        resp = cliente_x().get_users(usernames=faltam, user_fields=["profile_image_url"], user_auth=True)
+        for u in resp.data or []:
+            fotos[u.username.lower()] = (u.profile_image_url or "").replace("_normal", "_400x400")
+            db.table("bot_estado").upsert({"chave": f"foto_x:{u.username.lower()}", "valor": fotos[u.username.lower()]}).execute()
     cards = []
-    for usuario in resp.data or []:
-        url = (usuario.profile_image_url or "").replace("_normal", "_400x400")
+    for usuario in perfis:
+        url = fotos.get(usuario.lower(), "")
         if not url:
             continue
         logo = Image.open(io.BytesIO(requests.get(url, headers=UA, timeout=30).content)).convert("RGBA")
