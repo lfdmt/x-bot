@@ -173,7 +173,7 @@ AJUDA = ("Comandos:\n"
          "• /viral: 3 comentários seus sobre notícias do dia (política, geopolítica, mercado, inovação)"
          ". /viral seguido de um tema foca nele\n"
          "• /atualidades: assuntos do momento no Brasil, para tweetar sobre eles\n"
-         "• /respostas: posts em alta nas contas do seu nicho, para escolher quais responder\n"
+         "• /respostas: abre seu feed no X; mande o link do post que quer responder\n"
          "• /linkedin: post do LinkedIn com a melhor notícia do dia. /linkedin seguido de um tema usa a sua pauta\n"
          "• /exemplo seguido de um post seu do LinkedIn: o bot aprende o seu jeito de escrever\n"
          "• Escreva o que quer tweetar (ex.: \"tweet sobre o hack do Mercado Bitcoin e a confiança nas "
@@ -320,19 +320,22 @@ def tratar_atualizacao(db, u: dict):
         elif texto.lower().startswith("/atualidades"):
             mostrar_atualidades(db)
         elif texto.lower().startswith("/respostas"):
-            from respostas import SemCredito, descobrir
-            tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
-               text="⏳ Buscando os posts em alta nas contas do seu nicho.")
-            try:
-                achou = descobrir(db)
-            except SemCredito:
-                tg("sendMessage", chat_id=CHAT_ID, text="⚠️ A API do X está sem crédito, então não dá para buscar "
-                   "os posts em alta. Recarregue em console.x.com. Enquanto isso, cole o link de um post aqui "
-                   "que as 3 respostas chegam normalmente (essa leitura é grátis).")
-                achou = True
-            if not achou:
-                tg("sendMessage", chat_id=CHAT_ID, text="Nenhum post novo em alta nesse grupo de contas agora. "
-                   "Mande /respostas de novo para sortear outras contas.")
+            # Sem API (grátis): você escolhe o post no seu feed e manda o link. "/respostas api" usa a busca paga.
+            if "api" in texto.lower().split()[1:]:
+                from respostas import SemCredito, descobrir
+                try:
+                    achou = descobrir(db)
+                except SemCredito:
+                    achou = False
+                    tg("sendMessage", chat_id=CHAT_ID, text="⚠️ A API do X está sem crédito.")
+                if not achou:
+                    tg("sendMessage", chat_id=CHAT_ID, text="Nenhum post em alta veio da busca agora.")
+            else:
+                tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
+                   text="Abra seu feed, ache um post que valha responder e toque em compartilhar > copiar link "
+                        "(ou mande direto para cá). As 3 respostas chegam em uns 2 minutos.\n\n"
+                        "Dica: a aba Seguindo mostra só quem você segue, em ordem de horário.",
+                   reply_markup={"inline_keyboard": [[{"text": "📱 Abrir meu feed no X", "url": "https://x.com/home"}]]})
         elif texto.lower().startswith("/viral"):
             tema = texto[len("/viral"):].strip()
             db.table("bot_estado").upsert({"chave": f"pedido_viral:{msg['message_id']}", "valor": tema}).execute()
@@ -415,7 +418,7 @@ MENU = [
     ("viral", "3 comentários sobre notícias do dia. /viral tema foca num assunto"),
     ("gerar", "Busca notícias e gera rascunhos agora"),
     ("atualidades", "Assuntos do momento no Brasil"),
-    ("respostas", "Posts em alta para responder"),
+    ("respostas", "Abrir meu feed para escolher o que responder"),
     ("linkedin", "Post do LinkedIn. /linkedin tema usa a sua pauta"),
     ("exemplo", "Ensina o seu jeito de escrever no LinkedIn"),
 ]
