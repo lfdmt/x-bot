@@ -24,6 +24,19 @@ def lista_inicial() -> list[tuple[str, str]]:
     return contas
 
 
+# Busca de pessoas no X por assunto (grátis, você abre no app). Edite à vontade.
+ASSUNTOS = ["jornalista política", "economista", "mercado financeiro", "geopolítica", "bitcoin",
+            "inovação tecnologia"]
+
+
+def telas_do_x() -> list[list[dict]]:
+    from urllib.parse import quote
+
+    teclado = [[{"text": "✨ Sugestões do X para você", "url": "https://x.com/i/connect_people"}]]
+    botoes = [{"text": f"🔎 {a}", "url": f"https://x.com/search?q={quote(a)}&f=user"} for a in ASSUNTOS]
+    return teclado + [botoes[i:i + 2] for i in range(0, len(botoes), 2)]
+
+
 def ja_sigo() -> set[str]:
     return {l.split("#")[0].strip().lower() for l in JA_SIGO.read_text(encoding="utf-8").splitlines()
             if l.split("#")[0].strip()}
@@ -52,8 +65,10 @@ def sugerir(db) -> tuple[str, dict | None]:
         if len(escolhidas) == POR_VEZ:
             break
     if not escolhidas:
-        return ("Ainda não tenho contas novas para sugerir. Cada post que você responde pelo bot (cole o "
-                "link aqui) coloca o autor na lista, se você ainda não segue."), None
+        return ("👥 Por enquanto não há contas na lista. Estas telas do X mostram contas reais e ativas, de "
+                "graça: as sugestões do próprio X a partir de quem você segue, e a busca de pessoas por "
+                "assunto. Siga as médias, de 1 mil a 30 mil seguidores, que são as que mais seguem de volta.\n\n"
+                "Os autores dos posts que você responde pelo bot também entram aqui sozinhos."), {"inline_keyboard": telas_do_x()}
     agora = datetime.now(timezone.utc).isoformat()
     for usuario, _ in escolhidas:
         db.table("bot_estado").upsert({"chave": f"seguir_sugerido:{usuario.lower()}", "valor": agora}).execute()
