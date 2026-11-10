@@ -197,6 +197,15 @@ def disparar(workflow: str):
 def tratar_clique(db, cq: dict):
     acao, _, rid = cq["data"].partition(":")
     msg = cq["message"]
+    if acao == "seguirfora":
+        from seguir import tirar
+        tirar(db, rid)
+        teclado = [l for l in msg.get("reply_markup", {}).get("inline_keyboard", [])
+                   if not any(b.get("callback_data") == cq["data"] for b in l)]
+        tg("editMessageReplyMarkup", silencioso=True, chat_id=CHAT_ID, message_id=msg["message_id"],
+           reply_markup={"inline_keyboard": teclado})
+        tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text=f"@{rid} saiu da lista")
+        return
     if acao == "alta":
         lista = db.table("bot_estado").select("valor").eq("chave", "atualidades").execute().data
         assuntos = json.loads(lista[0]["valor"]) if lista else []

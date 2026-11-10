@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 LISTA = Path(__file__).with_name("seguir.txt")
+JA_SIGO = Path(__file__).with_name("perfis_resposta.txt")  # contas que você já segue
 POR_VEZ = 5
 
 
@@ -21,6 +22,11 @@ def lista_inicial() -> list[tuple[str, str]]:
     return contas
 
 
+def ja_sigo() -> set[str]:
+    return {l.split("#")[0].strip().lower() for l in JA_SIGO.read_text(encoding="utf-8").splitlines()
+            if l.split("#")[0].strip()}
+
+
 def lembrar_autor(db, usuario: str):
     """Guarda o autor de um post que você respondeu: bom candidato a seguir de volta."""
     if usuario and usuario != "?":
@@ -30,7 +36,9 @@ def lembrar_autor(db, usuario: str):
 
 def sugerir(db) -> tuple[str, dict | None]:
     estado = db.table("bot_estado").select("chave,valor").like("chave", "seguir_%").execute().data
-    ja = {l["chave"].split(":", 1)[1] for l in estado if l["chave"].startswith("seguir_sugerido:")}
+    # Fora: já sugeridas, as que você tirou pelo botão e as que você já segue.
+    ja = {l["chave"].split(":", 1)[1] for l in estado
+          if l["chave"].startswith(("seguir_sugerido:", "seguir_fora:"))} | ja_sigo()
     autores = [(l["valor"], "você respondeu um post") for l in estado if l["chave"].startswith("seguir_autor:")]
     lista = lista_inicial()
     random.shuffle(lista)  # mistura os temas a cada pedido
@@ -48,5 +56,12 @@ def sugerir(db) -> tuple[str, dict | None]:
         db.table("bot_estado").upsert({"chave": f"seguir_sugerido:{usuario.lower()}", "valor": agora}).execute()
     linhas = ["👥 Contas para seguir. Responder um post antes de seguir aumenta a chance de seguirem de volta.\n"]
     linhas += [f"• @{u}" + (f": {n}" if n else "") for u, n in escolhidas]
-    teclado = [[{"text": f"Abrir @{u}", "url": f"https://x.com/{u}"}] for u, _ in escolhidas]
+    teclado = [[{"text": f"Abrir @{u}", "url": f"https://x.com/{u}"},
+                {"text": "🚫 Tirar", "callback_data": f"seguirfora:{u}"[:64]}] for u, _ in escolhidas]
+    linhas.append("\n🚫 Tirar: a conta não existe, está parada ou não tem a ver. Ela nunca mais aparece.")
     return "\n".join(linhas), {"inline_keyboard": teclado}
+
+
+def tirar(db, usuario: str):
+    db.table("bot_estado").upsert({"chave": f"seguir_fora:{usuario.lower()}", "valor": usuario}).execute()
+    db.table("bot_estado").delete().eq("chave", f"seguir_autor:{usuario.lower()}").execute()
