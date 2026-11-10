@@ -388,12 +388,18 @@ def sortear_bloco(db, usuarios: list[str]) -> list[str]:
     return bloco
 
 
+class SemCredito(Exception):
+    """A API do X recusou por falta de crédito (402)."""
+
+
 def descobrir(db) -> bool:
     """Uma lista de posts em alta para cada nicho: cripto e mercado, e virais e atualidades."""
     achou = False
     for viral in (False, True):
         try:
             achou = descobrir_nicho(db, viral) or achou
+        except SemCredito:
+            raise
         except Exception as e:
             print(f"[respostas] em alta ({'virais' if viral else 'nicho'}) falhou: {e}")
     return achou
@@ -421,6 +427,8 @@ def descobrir_nicho(db, viral: bool) -> bool:
         )
     except tweepy.TweepyException as e:
         print(f"[respostas] busca falhou: {e}")
+        if "402" in str(e) or "credits" in str(e).lower():
+            raise SemCredito() from e
         return False
     nomes = {u.id: u.username for u in (resp.includes or {}).get("users", [])}
     ja = {l["chave"].split(":", 1)[1] for l in
@@ -486,7 +494,10 @@ def atender_virais(db):
 def main():
     db = supabase()
     if "--descobrir" in sys.argv:
-        descobrir(db)
+        try:
+            descobrir(db)
+        except SemCredito:
+            print("[respostas] sem crédito na API do X")
         return
     pendentes = pedidos(db)
     if "--checar" in sys.argv:

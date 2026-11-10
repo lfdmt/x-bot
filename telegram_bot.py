@@ -320,10 +320,17 @@ def tratar_atualizacao(db, u: dict):
         elif texto.lower().startswith("/atualidades"):
             mostrar_atualidades(db)
         elif texto.lower().startswith("/respostas"):
-            from respostas import descobrir
+            from respostas import SemCredito, descobrir
             tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
                text="⏳ Buscando os posts em alta nas contas do seu nicho.")
-            if not descobrir(db):
+            try:
+                achou = descobrir(db)
+            except SemCredito:
+                tg("sendMessage", chat_id=CHAT_ID, text="⚠️ A API do X está sem crédito, então não dá para buscar "
+                   "os posts em alta. Recarregue em console.x.com. Enquanto isso, cole o link de um post aqui "
+                   "que as 3 respostas chegam normalmente (essa leitura é grátis).")
+                achou = True
+            if not achou:
                 tg("sendMessage", chat_id=CHAT_ID, text="Nenhum post novo em alta nesse grupo de contas agora. "
                    "Mande /respostas de novo para sortear outras contas.")
         elif texto.lower().startswith("/viral"):

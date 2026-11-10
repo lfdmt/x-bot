@@ -49,7 +49,10 @@ class handler(BaseHTTPRequestHandler):
             feito.append("coleta")
         if (datetime.now(BRASILIA).hour in HORAS_EM_ALTA
                 and vencido(db, "tick:em_alta", timedelta(minutes=55))):
-            descobrir(db)
+            try:
+                descobrir(db)
+            except Exception as e:  # sem crédito no X, a busca automática só pula a vez
+                print(f"[tick] em alta falhou: {e}")
             feito.append("em_alta")
         # Rede de segurança: pedidos que o webhook não conseguiu disparar.
         if (pedidos(db) or pedidos_de_tweet(db)) and vencido(db, "tick:pedidos", INTERVALO_PEDIDOS):
