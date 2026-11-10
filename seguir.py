@@ -2,7 +2,9 @@
 
 O bot não segue ninguém (seguir em massa por automação é contra as regras do X): ele só sugere e
 abre o perfil, e você toca em Seguir. Vêm primeiro os autores dos posts que você respondeu pelo bot
-(já viram seu nome), depois a lista do seguir.txt. Nenhuma conta é sugerida duas vezes.
+(já viram seu nome, e são contas reais que postaram há pouco), depois o que você puser no
+seguir.txt. Nunca adivinhar @: só entram contas que o bot viu postando ou que você conferiu.
+Nenhuma conta é sugerida duas vezes.
 """
 import random
 from datetime import datetime, timezone
@@ -49,8 +51,9 @@ def sugerir(db) -> tuple[str, dict | None]:
         if len(escolhidas) == POR_VEZ:
             break
     if not escolhidas:
-        return ("Acabaram as sugestões. Acrescente contas no seguir.txt ou responda mais posts pelo bot, "
-                "que os autores entram na lista."), None
+        return ("Ainda não tenho contas novas para sugerir. Cada post que você responde pelo bot (cole o "
+                "link aqui) coloca o autor na lista, se você ainda não segue. Você também pode pôr @ "
+                "que conferiu no seguir.txt."), None
     agora = datetime.now(timezone.utc).isoformat()
     for usuario, _ in escolhidas:
         db.table("bot_estado").upsert({"chave": f"seguir_sugerido:{usuario.lower()}", "valor": agora}).execute()
