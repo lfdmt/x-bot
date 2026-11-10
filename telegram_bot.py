@@ -12,6 +12,8 @@ import sys
 import time
 from datetime import datetime, timedelta, timezone
 
+from urllib.parse import quote
+
 import requests
 
 from config import env, supabase
@@ -70,7 +72,17 @@ def botoes(r: dict) -> dict:
          {"text": "⏰ Em 30 min", "callback_data": f"em30:{r['id']}"}],
         [{"text": "🕐 Próximo horário bom", "callback_data": f"bom:{r['id']}"}],
         segunda,
+        manual(r),
     ]}
+
+
+def manual(r: dict) -> list[dict]:
+    """Postar à mão, sem a API: abre o X com o texto escrito, copia o texto e marca como postado."""
+    linha = [{"text": "✍️ Abrir no X", "url": f"https://x.com/intent/post?text={quote(r['texto'])}"}]
+    if len(r["texto"]) <= 256:  # limite do botão de copiar do Telegram
+        linha.append({"text": "📋 Copiar", "copy_text": {"text": r["texto"]}})
+    linha.append({"text": "✅ Já postei", "callback_data": f"postei:{r['id']}"})
+    return linha
 
 
 AVISO_LIMITE = (f"Limite de {LIMITE_DIARIO} posts por dia atingido. "
@@ -223,6 +235,14 @@ def tratar_clique(db, cq: dict):
         editar(msg["message_id"], corpo(r), botoes(r))
         tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Vai sair só o texto")
         confirmar(msg["message_id"], f"🚫 Rascunho #{r['id']} vai sair sem mídia, só o texto.")
+        return
+    if acao == "postei":
+        db.table("rascunhos").update({"status": "publicado", "publicado_em": datetime.now(timezone.utc).isoformat()}
+                                     ).eq("id", r["id"]).execute()
+        db.table("bot_estado").delete().eq("chave", f"agendar:{r['id']}").execute()
+        editar(msg["message_id"], corpo(r), {"inline_keyboard": []})
+        tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Marcado como postado")
+        confirmar(msg["message_id"], f"✅ Rascunho #{r['id']} marcado como postado à mão.")
         return
     agora = datetime.now(timezone.utc)
     if acao in ("agora", "aprovar", "em30") and dia_cheio(db, agora + (ESPERA_AGENDADA if acao == "em30" else timedelta())):
