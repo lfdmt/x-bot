@@ -20,7 +20,7 @@ BRASILIA = timezone(timedelta(hours=-3))
 EM_ANDAMENTO = "9999-12-31T00:00:00+00:00"
 # Picos de engajamento no Brasil: manhã, almoço, fim de tarde e noite (horário de Brasília).
 HORARIOS_BONS = [(8, 30), (12, 15), (18, 30), (20, 30)]
-LIMITE_DIARIO = int(os.getenv("LIMITE_DIARIO", "0"))  # 0 = sem limite
+LIMITE_DIARIO = int(os.getenv("LIMITE_DIARIO", "3"))  # 0 = sem limite. 3: menos posts, mais voz própria
 
 
 def avisar_telegram(texto: str):

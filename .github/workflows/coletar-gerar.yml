@@ -20,7 +20,7 @@ jobs:
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-      RASCUNHOS_POR_EXECUCAO: ${{ vars.RASCUNHOS_POR_EXECUCAO || '5' }}
+      RASCUNHOS_POR_EXECUCAO: ${{ vars.RASCUNHOS_POR_EXECUCAO || '1' }}
       # Leitura dos posts do @beincrypto (cerca de US$ 0,005 por post lido)
       COLETAR_X: ${{ vars.COLETAR_X || 'false' }}  # ler o X é pago; o site vem por RSS
       X_API_KEY: ${{ secrets.X_API_KEY }}

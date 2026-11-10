@@ -16,7 +16,9 @@ from midia import buscar_gif, grafico, imagem_da_materia, logos_do_x, salvar_pub
 
 MODELO = "claude-opus-5-5"
 LIMITE_TWEET = 280
-POR_EXECUCAO = int(os.getenv("RASCUNHOS_POR_EXECUCAO", "5"))
+POR_EXECUCAO = int(os.getenv("RASCUNHOS_POR_EXECUCAO", "1"))
+# Relatório de 2026-11-10: ~6 posts de notícia por dia deixaram a conta com cara de portal e o alcance caiu.
+POR_DIA = int(os.getenv("RASCUNHOS_POR_DIA", "4"))
 # Notícias repetidas ou fora do tema são puladas: segue descendo a lista até este limite de chamadas.
 MAX_TENTATIVAS = int(os.getenv("MAX_TENTATIVAS", "15"))
 VOZ = Path(__file__).with_name("voz.md")
@@ -57,6 +59,19 @@ def system_prompt() -> str:
         "Always write in Portuguese, in your own words; never translate a source post line by line.\n"
         "- Only state facts present in the source. Never invent numbers, quotes or predictions.\n"
         "- If the source falls outside the themes or touches a limit in the guide, set publicar=false.\n"
+        "- Every post carries his own read, not just the news. The fact comes first, briefly, then his take "
+        "in one sentence: what it means for Brazil or for people's money, a contradiction, a comparison, or "
+        "what nobody is saying. Never a neutral headline. Never the 'O detalhe:' / 'O motivo:' portal "
+        "formula. A take is an opinion clearly framed as his, never a new fact.\n"
+        "- Avoid AI tells in the take: 'não é X, é Y', 'é X, não Y', 'isso mostra que', 'vale lembrar', "
+        "polished parallel sentences, lists of three.\n"
+        "- Sometimes (about one post in three) end with a short, real question that invites replies, "
+        "or take a clear side on something debatable. No generic 'o que vocês acham?'.\n"
+        "- Brazil first. Strongly prefer stories that matter to Brazilians: Ibovespa, dollar, Selic, "
+        "Brazilian banks, fintechs and exchanges, government and regulation, big global moves (Fed, Trump, "
+        "Bitcoin price) with a Brazilian angle. Set publicar=false for routine institutional crypto news "
+        "from abroad (a fund's purchase, a US bill, a token's partnership, a company's treasury) unless it "
+        "is big enough that Brazilians are talking about it.\n"
         "- Each request names the post format. Write for that format; any media complements the text and "
         "is never described by it."
     )
@@ -276,6 +291,12 @@ def main():
         r["texto"] for r in
         reversed(db.table("rascunhos").select("texto").order("id", desc=True).limit(25).execute().data)
     ]
+    from datetime import datetime, timedelta, timezone
+    inicio = datetime.now(timezone(timedelta(hours=-3))).replace(hour=0, minute=0, second=0, microsecond=0)
+    hoje = db.table("rascunhos").select("id").not_.is_("fonte_id", "null").gte("criado_em", inicio.isoformat()).execute().data
+    if len(hoje) >= POR_DIA:
+        print(f"[gerador] já são {len(hoje)} rascunhos de notícia hoje (limite {POR_DIA})")
+        return
     criados = 0
     for fonte in fontes:
         if criados >= POR_EXECUCAO:
