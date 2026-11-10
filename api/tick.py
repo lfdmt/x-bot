@@ -10,14 +10,12 @@ from urllib.parse import parse_qs, urlparse
 
 import publicador
 from config import supabase
-from publicador import BRASILIA
-from respostas import descobrir, pedidos, pedidos_de_tweet
+from respostas import pedidos, pedidos_de_tweet
 from telegram_bot import disparar, enviar_pendentes
 
 INTERVALO_COLETA = timedelta(hours=3)
 INTERVALO_PEDIDOS = timedelta(minutes=10)
 # Posts em alta das contas grandes, de hora em hora nos picos (horário de Brasília).
-HORAS_EM_ALTA = {int(h) for h in os.getenv("HORAS_EM_ALTA", "8,9,12,13,18,19,20,21").split(",") if h}
 
 
 def vencido(db, chave: str, intervalo: timedelta) -> bool:
@@ -47,13 +45,7 @@ class handler(BaseHTTPRequestHandler):
         if vencido(db, "tick:coleta", INTERVALO_COLETA):
             disparar("coletar-gerar.yml")
             feito.append("coleta")
-        if (datetime.now(BRASILIA).hour in HORAS_EM_ALTA
-                and vencido(db, "tick:em_alta", timedelta(minutes=55))):
-            try:
-                descobrir(db)
-            except Exception as e:  # sem crédito no X, a busca automática só pula a vez
-                print(f"[tick] em alta falhou: {e}")
-            feito.append("em_alta")
+        # A lista de posts em alta só sai quando você pede /respostas (decisão de 2026-11-10).
         # Rede de segurança: pedidos que o webhook não conseguiu disparar.
         if (pedidos(db) or pedidos_de_tweet(db)) and vencido(db, "tick:pedidos", INTERVALO_PEDIDOS):
             disparar("respostas.yml")
