@@ -47,6 +47,19 @@ SCHEMA = {
 }
 
 
+GANCHO = (
+    "- The FIRST LINE is a human hook that makes people stop scrolling, written like a person talking, "
+    "not like a headline. Pick what fits the story: a reaction ('Essa eu não esperava.'), something "
+    "relatable from everyday Brazilian life (the bank app, the market, the boleto, the group chat, the "
+    "salary), an ironic contrast, a striking number turned into something people feel, or a short "
+    "provocative line. Keep it short (ideally under 70 characters) and true to the source. Never open "
+    "with the institution's name followed by a verb, the way a portal headline does ('O Banco Central "
+    "informou...', 'A Receita vai...'). No clickbait clichés: 'URGENTE', 'BOMBA', 'Você não vai "
+    "acreditar', 'Atenção', 'Ninguém está falando sobre isso', 'Plot twist'. Vary the kind of hook "
+    "from post to post."
+)
+
+
 def system_prompt() -> str:
     return (
         "You write posts for the personal X account of the Head of LATAM at BeInCrypto. "
@@ -62,15 +75,7 @@ def system_prompt() -> str:
         "Always write in Portuguese, in your own words; never translate a source post line by line.\n"
         "- Only state facts present in the source. Never invent numbers, quotes or predictions.\n"
         "- If the source falls outside the themes or touches a limit in the guide, set publicar=false.\n"
-        "- The FIRST LINE is a human hook that makes people stop scrolling, written like a person talking, "
-        "not like a headline. Pick what fits the story: a reaction ('Essa eu não esperava.'), something "
-        "relatable from everyday Brazilian life (the bank app, the market, the boleto, the group chat, the "
-        "salary), an ironic contrast, a striking number turned into something people feel, or a short "
-        "provocative line. Keep it short (ideally under 70 characters) and true to the source. Never open "
-        "with the institution's name followed by a verb, the way a portal headline does ('O Banco Central "
-        "informou...', 'A Receita vai...'). No clickbait clichés: 'URGENTE', 'BOMBA', 'Você não vai "
-        "acreditar', 'Atenção', 'Ninguém está falando sobre isso', 'Plot twist'. Vary the kind of hook "
-        "from post to post.\n"
+        f"{GANCHO}\n"
         "- After the hook, the fact, briefly, then his take "
         "in one sentence: what it means for Brazil or for people's money, a contradiction, a comparison, or "
         "what nobody is saying. Never a neutral headline. Never the 'O detalhe:' / 'O motivo:' portal "
@@ -242,8 +247,9 @@ def sistema_viral() -> str:
         "criticizes whoever deserves it, left or right, and never sounds like a party activist. No cheering "
         "for a candidate, no insults, no calls to vote.\n\n"
         "Rules:\n"
-        f"- Brazilian Portuguese, at most {LIMITE_TWEET - 10} characters, most under 160.\n"
-        "- Each tweet is about a specific fact from the headlines. The reader should know what happened "
+        f"- Brazilian Portuguese, at most {LIMITE_TWEET - 10} characters, most under 220. Break lines between the hook, the fact and the take.\n"
+        f"{GANCHO}\n"
+        "- After the hook, the specific fact from the headlines. The reader should know what happened "
         "from the tweet itself (name who and what), then get his take: an ironic observation, a sharp "
         "comparison, a question that exposes a contradiction, or what it means for the economy or Brazil.\n"
         "- Comment, never summarize: no 'X anunciou que' as the whole tweet, no neutral news report.\n"
