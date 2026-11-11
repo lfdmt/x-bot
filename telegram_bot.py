@@ -378,6 +378,9 @@ def tratar_atualizacao(db, u: dict):
             extra = {"reply_markup": teclado} if teclado else {}
             tg("sendMessage", chat_id=CHAT_ID, text=texto_seguir, disable_web_page_preview=True, **extra)
         elif texto.lower().startswith("/gerar"):
+            # Pedido seu: gera mesmo fora do horário e acima do limite diário.
+            db.table("bot_estado").upsert({"chave": "gerar:pedido",
+                                           "valor": datetime.now(timezone.utc).isoformat()}).execute()
             disparar("coletar-gerar.yml")
             tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
                text="⏳ Buscando notícias. Os rascunhos novos chegam em alguns minutos.")

@@ -18,7 +18,10 @@ MODELO = "claude-opus-5-5"
 LIMITE_TWEET = 280
 POR_EXECUCAO = int(os.getenv("RASCUNHOS_POR_EXECUCAO", "1"))
 # Relatório de 2026-11-10: ~6 posts de notícia por dia deixaram a conta com cara de portal e o alcance caiu.
-POR_DIA = int(os.getenv("RASCUNHOS_POR_DIA", "4"))
+# Conta só os rascunhos automáticos; o /gerar que você pede no Telegram sempre gera.
+POR_DIA = int(os.getenv("RASCUNHOS_POR_DIA", "6"))
+# Horário de Brasília em que a coleta automática gera rascunhos (de madrugada ela só guarda as notícias).
+HORA_INICIO, HORA_FIM = 7, 23
 # Notícias repetidas ou fora do tema são puladas: segue descendo a lista até este limite de chamadas.
 MAX_TENTATIVAS = int(os.getenv("MAX_TENTATIVAS", "15"))
 VOZ = Path(__file__).with_name("voz.md")
@@ -294,9 +297,18 @@ def main():
     from datetime import datetime, timedelta, timezone
     inicio = datetime.now(timezone(timedelta(hours=-3))).replace(hour=0, minute=0, second=0, microsecond=0)
     hoje = db.table("rascunhos").select("id").not_.is_("fonte_id", "null").gte("criado_em", inicio.isoformat()).execute().data
-    if len(hoje) >= POR_DIA:
-        print(f"[gerador] já são {len(hoje)} rascunhos de notícia hoje (limite {POR_DIA})")
-        return
+    pedido = db.table("bot_estado").select("valor").eq("chave", "gerar:pedido").execute().data
+    manual = bool(pedido) and datetime.now(timezone.utc) - datetime.fromisoformat(pedido[0]["valor"]) < timedelta(minutes=30)
+    if manual:
+        db.table("bot_estado").delete().eq("chave", "gerar:pedido").execute()
+    else:
+        hora = datetime.now(timezone(timedelta(hours=-3))).hour
+        if not HORA_INICIO <= hora < HORA_FIM:
+            print(f"[gerador] {hora}h em Brasília: fora do horário, só guardei as notícias")
+            return
+        if len(hoje) >= POR_DIA:
+            print(f"[gerador] já são {len(hoje)} rascunhos de notícia hoje (limite {POR_DIA})")
+            return
     criados = 0
     for fonte in fontes:
         if criados >= POR_EXECUCAO:
