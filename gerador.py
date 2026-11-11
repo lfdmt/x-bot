@@ -70,11 +70,16 @@ def system_prompt() -> str:
         "polished parallel sentences, lists of three.\n"
         "- Sometimes (about one post in three) end with a short, real question that invites replies, "
         "or take a clear side on something debatable. No generic 'o que vocês acham?'.\n"
-        "- Brazil first. Strongly prefer stories that matter to Brazilians: Ibovespa, dollar, Selic, "
-        "Brazilian banks, fintechs and exchanges, government and regulation, big global moves (Fed, Trump, "
-        "Bitcoin price) with a Brazilian angle. Set publicar=false for routine institutional crypto news "
-        "from abroad (a fund's purchase, a US bill, a token's partnership, a company's treasury) unless it "
-        "is big enough that Brazilians are talking about it.\n"
+        "- MANDATORY: the story must be relevant in Brazil. Publish only if (a) it is about Brazil: "
+        "Brazilian companies, banks, fintechs, exchanges, B3, Ibovespa, real/dollar, Selic, Banco Central, "
+        "CVM, Receita, Congress, government, Brazilian politicians or Brazilian users; or (b) it is a big "
+        "global move that hits Brazilians directly and that Brazilians are talking about: Bitcoin or "
+        "Ether price swings, the Fed, Trump or Musk decisions with market impact, a major hack or failure "
+        "of an exchange widely used in Brazil (Binance, etc.). In case (b) the post must spell out the "
+        "Brazilian angle (the real, Brazilian investors, local exchanges, Brazilian rules). Everything "
+        "else from abroad is publicar=false: a foreign fund's purchase, a US or Asian bill, a token "
+        "partnership, a company treasury, a foreign startup, a niche protocol hack, foreign tech news. "
+        "When in doubt, publicar=false and say in motivo why it lacks Brazilian relevance.\n"
         "- Each request names the post format. Write for that format; any media complements the text and "
         "is never described by it."
     )
@@ -280,8 +285,10 @@ def main():
     db = supabase()
     fontes = (
         db.table("fontes").select("*").eq("usado", False)
-        .order("publicado_em", desc=True).limit(MAX_TENTATIVAS).execute().data
+        .order("publicado_em", desc=True).limit(MAX_TENTATIVAS * 3).execute().data
     )
+    # Fontes em português primeiro (são as que têm mais chance de importar no Brasil), depois as mais novas.
+    fontes = sorted(fontes, key=lambda f: f.get("idioma") != "pt")[:MAX_TENTATIVAS]
     if not fontes:
         print("[gerador] nenhuma fonte nova")
         return

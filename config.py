@@ -14,6 +14,9 @@ FEEDS = [
     ("BeInCrypto", "en", "https://beincrypto.com/feed/"),  # no lugar de ler o @beincrypto pela API paga
     ("Livecoins", "pt", "https://livecoins.com.br/feed/"),
     ("Portal do Bitcoin", "pt", "https://portaldobitcoin.uol.com.br/feed/"),
+    # Mercado brasileiro: Ibovespa, dólar, Selic, bancos e fintechs.
+    ("InfoMoney", "pt", "https://www.infomoney.com.br/feed/"),
+    ("g1 Economia", "pt", "https://g1.globo.com/rss/g1/economia/"),
     ("CoinDesk", "en", "https://www.coindesk.com/arc/outboundfeeds/rss/"),
     ("Cointelegraph", "en", "https://cointelegraph.com/rss"),
     ("Decrypt", "en", "https://decrypt.co/feed"),
