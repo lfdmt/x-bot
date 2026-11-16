@@ -505,6 +505,55 @@ def atender_virais(db):
             tg("sendMessage", chat_id=CHAT_ID, text="⚠️ Não saiu nenhum tweet bom. Mande /viral de novo.")
 
 
+def mostrar_thread(t: dict):
+    """Uma mensagem por thread, cada tweet em <code> (no Telegram, um toque copia)."""
+    total = len(t["tweets"])
+    cabeca = f"🧵 <b>{html.escape(t['tema'])}</b>\n<i>{html.escape(t['por_que'])}</i>\n"
+    if t.get("materias"):
+        cabeca += "Base: " + " · ".join(
+            f"<a href=\"{html.escape(m['url'])}\">{html.escape(m['titulo'][:60])}</a>" for m in t["materias"][:3]) + "\n"
+    blocos = []
+    for n, texto in enumerate(t["tweets"], 1):
+        aviso = f" ⚠️ {len(texto)} caracteres" if len(texto) > LIMITE_TWEET else ""
+        blocos.append(f"<b>{n}/{total}</b>{aviso}\n<code>{html.escape(texto)}</code>")
+    teclado = {"inline_keyboard": [[{
+        "text": f"✍️ Abrir 1/{total} no X",
+        "url": "https://x.com/intent/post?text=" + quote(t["tweets"][0]),
+    }]]}
+    # Telegram aceita até 4096 caracteres por mensagem: quebra em partes se precisar.
+    partes, atual = [], cabeca
+    for b in blocos:
+        if len(atual) + len(b) + 2 > 3900:
+            partes.append(atual)
+            atual = ""
+        atual += "\n" + b + "\n"
+    partes.append(atual)
+    for i, parte in enumerate(partes):
+        ultima = i == len(partes) - 1
+        tg("sendMessage", chat_id=CHAT_ID, text=parte, parse_mode="HTML", disable_web_page_preview=True,
+           **({"reply_markup": teclado} if ultima else {}))
+
+
+def atender_threads(db):
+    from gerador import gerar_threads
+
+    for p in db.table("bot_estado").select("*").like("chave", "pedido_thread:%").execute().data:
+        db.table("bot_estado").delete().eq("chave", p["chave"]).execute()
+        try:
+            threads = gerar_threads(db, p["valor"].strip())
+        except Exception as e:
+            tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Falha ao escrever as threads: {e}")
+            continue
+        if not threads:
+            tg("sendMessage", chat_id=CHAT_ID, text="⚠️ Não saiu nenhuma thread boa. Mande /thread de novo.")
+            continue
+        tg("sendMessage", chat_id=CHAT_ID,
+           text=f"✅ {len(threads)} ideias de thread. Toque no texto de cada tweet para copiar; poste o 1 e "
+                "responda a ele com os seguintes 👇")
+        for t in threads:
+            mostrar_thread(t)
+
+
 def main():
     db = supabase()
     if "--descobrir" in sys.argv:
@@ -517,7 +566,8 @@ def main():
     if "--checar" in sys.argv:
         tem = bool(pendentes or pedidos_de_tweet(db) or
                    db.table("bot_estado").select("chave").like("chave", "pedido_a%").execute().data or
-                   db.table("bot_estado").select("chave").like("chave", "pedido_viral:%").execute().data)
+                   db.table("bot_estado").select("chave").like("chave", "pedido_viral:%").execute().data or
+                   db.table("bot_estado").select("chave").like("chave", "pedido_thread:%").execute().data)
         saida = os.getenv("GITHUB_OUTPUT")
         if saida:
             with open(saida, "a") as f:
@@ -528,6 +578,7 @@ def main():
     atender_assuntos(db)
     atender_pedidos_de_tweet(db)
     atender_virais(db)
+    atender_threads(db)
     for tweet_id in pendentes:
         valor = db.table("bot_estado").select("valor").eq("chave", f"pedido_resposta:{tweet_id}").execute().data
         db.table("bot_estado").delete().eq("chave", f"pedido_resposta:{tweet_id}").execute()

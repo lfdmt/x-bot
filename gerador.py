@@ -310,6 +310,113 @@ def gerar_virais(db, conversa: str, tema: str = "", quantos: int = 3) -> list[in
     return ids
 
 
+SCHEMA_THREADS = {
+    "type": "object",
+    "properties": {
+        "threads": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "tema": {"type": "string", "description": "assunto da thread em até 6 palavras"},
+                    "por_que": {"type": "string", "description": "uma frase: por que prende o leitor até o fim"},
+                    "fontes": {"type": "array", "items": {"type": "integer"},
+                               "description": "números das matérias usadas, da lista do pedido"},
+                    "tweets": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["tema", "por_que", "fontes", "tweets"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["threads"],
+    "additionalProperties": False,
+}
+
+
+def sistema_thread() -> str:
+    return (
+        "You write X threads for the personal account of the Head of LATAM at BeInCrypto: a journalist and "
+        "editor, a media man who reads every story the newsroom publishes. The voice guide below defines his "
+        "tone; follow it.\n\n"
+        f"<voice_guide>\n{VOZ.read_text(encoding='utf-8')}\n</voice_guide>\n\n"
+        "What a thread is for: explain one subject so well that people read to the end, save it and share it. "
+        "Long dwell time, not hot takes. Pick subjects where BeInCrypto stories, read together, tell a bigger "
+        "story than any single headline: a trend across several articles, a mechanism people use but do not "
+        "understand (how a hack happened, why the price moved, what a rule changes, how a product makes "
+        "money), a before and after, or a 'what nobody explained' angle.\n\n"
+        "His point of view as editor: he sees the whole flow of news, so he can say what the coverage keeps "
+        "missing, which story is bigger than it looks, what readers keep asking, how to read a headline "
+        "like this. Use that lens in one or two tweets, never as self promotion, never mentioning internal "
+        "newsroom data he would not have.\n\n"
+        "Structure:\n"
+        "- Tweet 1 is the hook: a human first line (a surprising fact, a contradiction, a question everyone "
+        "has) and a clear promise of what the reader will understand by the end. End it with 🧵. No "
+        "'Segue o fio', no 'Thread:', no clickbait clichés ('URGENTE', 'Ninguém está falando sobre isso').\n"
+        "- Then 5 to 8 tweets that build the explanation step by step: context, how it works, the numbers, "
+        "who wins and who loses, what it means for Brazil and for people's money. Each tweet must make sense "
+        "alone and make the next one tempting; one idea per tweet.\n"
+        "- The last tweet closes with his own read in one or two sentences and a real question that invites "
+        "replies. No 'gostou? me segue', no 'RT se ajudou'.\n\n"
+        "Rules:\n"
+        f"- Brazilian Portuguese, each tweet at most {LIMITE_TWEET - 10} characters. No numbering like '1/7' "
+        "(the bot adds it). No links, no hashtags, emoji only where it really helps.\n"
+        "- Only facts, numbers and quotes that appear in the stories given. Never invent. When explaining a "
+        "general concept (what a stablecoin is, how a halving works) you may use common knowledge, stated "
+        "plainly and without new numbers.\n"
+        "- Always spell out the Brazilian angle: the real, Brazilian investors and exchanges, Banco Central, "
+        "CVM, Receita, Brazilian rules or habits.\n"
+        f"{CASHTAG}"
+        "- Avoid AI tells: 'não é X, é Y', 'isso mostra que', 'vale lembrar', 'em resumo', 'o ponto é', "
+        "lists of three, polished parallel sentences, lecture tone. Write like a smart person explaining "
+        "to a friend.\n"
+        "- Each thread uses a different subject. In fontes, list the numbers of the stories it is based on."
+    )
+
+
+def gerar_threads(db, tema: str = "", quantas: int = 2) -> list[dict]:
+    """Sugestões de thread explicativa a partir das matérias do BeInCrypto dos últimos 7 dias."""
+    from datetime import datetime, timedelta, timezone
+    desde = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    materias = (
+        db.table("fontes").select("titulo,resumo,url,publicado_em,origem")
+        .ilike("origem", "BeInCrypto%").eq("tipo", "noticia").gte("publicado_em", desde)
+        .order("publicado_em", desc=True).limit(80).execute().data
+    )
+    # Português primeiro, depois as mais novas.
+    materias = sorted(materias, key=lambda m: m.get("origem") != "BeInCrypto Brasil")[:60]
+    if not materias:
+        return []
+    lista = "\n".join(
+        f"[{i}] ({(m.get('publicado_em') or '')[:10]}, {m['origem']}) {m['titulo']}: {(m.get('resumo') or '')[:400]}"
+        for i, m in enumerate(materias, 1)
+    )
+    feitas = db.table("bot_estado").select("valor").eq("chave", "threads:temas").execute().data
+    anteriores = json.loads(feitas[0]["valor"]) if feitas else []
+    pedido = (
+        (f"Subject requested by the account owner: \"{tema}\". Every thread must be about it, using the "
+         "stories that touch it.\n\n" if tema else
+         "Choose the subjects with the most explanatory potential and the most interest for Brazilians.\n\n") +
+        f"BeInCrypto stories from the last 7 days:\n{lista}\n\n" +
+        ("Subjects of threads already suggested, do not repeat:\n" + "\n".join(f"- {t}" for t in anteriores) + "\n\n"
+         if anteriores else "") +
+        f"Write {quantas} threads."
+    )
+    saida = claude_json(pedido, sistema_thread(), SCHEMA_THREADS) or {}
+    threads = []
+    for t in saida.get("threads", [])[:quantas]:
+        tweets = [x.strip() for x in t["tweets"] if x.strip()]
+        if len(tweets) < 3:
+            continue
+        t["tweets"] = tweets
+        t["materias"] = [materias[n - 1] for n in t.get("fontes", []) if 0 < n <= len(materias)]
+        threads.append(t)
+    if threads:
+        temas = (anteriores + [t["tema"] for t in threads])[-15:]
+        db.table("bot_estado").upsert({"chave": "threads:temas", "valor": json.dumps(temas, ensure_ascii=False)}).execute()
+    return threads
+
+
 def main():
     db = supabase()
     fontes = (

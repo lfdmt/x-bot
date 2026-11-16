@@ -184,6 +184,8 @@ AJUDA = ("Comandos:\n"
          "• /gerar: busca notícias e gera rascunhos agora\n"
          "• /viral: 3 comentários seus sobre notícias do dia (política, geopolítica, mercado, inovação)"
          ". /viral seguido de um tema foca nele\n"
+         "• /thread: 2 threads explicativas com seu olhar de editor, a partir das matérias do BeInCrypto da semana"
+         ". /thread seguido de um tema foca nele\n"
          "• /atualidades: assuntos do momento no Brasil, para tweetar sobre eles\n"
          "• /respostas: abre seu feed no X; mande o link do post que quer responder\n"
          "• /seguir: 5 contas para seguir, com chance de seguirem de volta.\n"
@@ -363,6 +365,13 @@ def tratar_atualizacao(db, u: dict):
             tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
                text="⏳ Escrevendo 3 tweets do dia a dia" + (f" sobre {tema}" if tema else "") +
                ". Chegam aqui em 2 a 3 minutos.")
+        elif texto.lower().startswith("/thread"):
+            tema = texto[len("/thread"):].strip()
+            db.table("bot_estado").upsert({"chave": f"pedido_thread:{msg['message_id']}", "valor": tema}).execute()
+            disparar("respostas.yml")
+            tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
+               text="⏳ Lendo as matérias do BeInCrypto da semana e montando 2 threads" +
+               (f" sobre {tema}" if tema else "") + ". Chegam aqui em 3 a 5 minutos.")
         elif texto.lower().startswith("/seguir"):
             from seguir import buscar, sugerir
             if "buscar" in texto.lower():
@@ -437,6 +446,7 @@ def enviar_pendentes(db):
 # `python telegram_bot.py --menu` uma vez.
 MENU = [
     ("viral", "3 comentários sobre notícias do dia. /viral tema foca num assunto"),
+    ("thread", "2 threads explicativas das matérias do BeInCrypto. /thread tema foca num assunto"),
     ("gerar", "Busca notícias e gera rascunhos agora"),
     ("atualidades", "Assuntos do momento no Brasil"),
     ("respostas", "Abrir meu feed para escolher o que responder"),
