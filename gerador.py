@@ -47,6 +47,18 @@ SCHEMA = {
 }
 
 
+CASHTAG = (
+    "- When the post names a publicly traded company, write its cashtag next to the first mention, e.g. "
+    "'Nvidia ($NVDA)' or 'Tesla ($TSLA)', so X shows the price card. X only links cashtags made of "
+    "letters (1 to 6), so B3 codes with digits like PETR4 do not work: for Brazilian companies use the "
+    "US listed ticker when there is one (Petrobras $PBR, Vale $VALE, Itaú $ITUB, Nubank $NU, Bradesco "
+    "$BBD, Ambev $ABEV, XP $XP, Inter $INTR, StoneCo $STNE, PagSeguro $PAGS, Sabesp $SBS, Eletrobras "
+    "$EBR, Gerdau $GGB, Suzano $SUZ); otherwise no cashtag. X allows only ONE cashtag per post: use it "
+    "for the most central company. Only use a ticker you are sure of; never invent one. Not for crypto "
+    "tokens, private companies or government bodies.\n"
+)
+
+
 GANCHO = (
     "- The FIRST LINE is a human hook that makes people stop scrolling, written like a person talking, "
     "not like a headline. Pick what fits the story: a reaction ('Essa eu não esperava.'), something "
@@ -76,6 +88,7 @@ def system_prompt() -> str:
         "- Only state facts present in the source. Never invent numbers, quotes or predictions.\n"
         "- If the source falls outside the themes or touches a limit in the guide, set publicar=false.\n"
         f"{GANCHO}\n"
+        f"{CASHTAG}"
         "- After the hook, the fact, briefly, then his take "
         "in one sentence: what it means for Brazil or for people's money, a contradiction, a comparison, or "
         "what nobody is saying. Never a neutral headline. Never the 'O detalhe:' / 'O motivo:' portal "
@@ -249,6 +262,7 @@ def sistema_viral() -> str:
         "Rules:\n"
         f"- Brazilian Portuguese, at most {LIMITE_TWEET - 10} characters, most under 220. Break lines between the hook, the fact and the take.\n"
         f"{GANCHO}\n"
+        f"{CASHTAG}"
         "- After the hook, the specific fact from the headlines. The reader should know what happened "
         "from the tweet itself (name who and what), then get his take: an ironic observation, a sharp "
         "comparison, a question that exposes a contradiction, or what it means for the economy or Brazil.\n"
