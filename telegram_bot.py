@@ -182,6 +182,7 @@ def salvar_offset(db, offset: int):
 AVISO_PEDIDO = "⏳ Recebi o link. As 3 opções de resposta chegam aqui em alguns minutos."
 AJUDA = ("Comandos:\n"
          "• /gerar: busca notícias e gera rascunhos agora\n"
+         "• /investidor: 3 rascunhos das notícias mais quentes para investidor agora\n"
          "• /viral: 3 comentários seus sobre notícias do dia (política, geopolítica, mercado, inovação)"
          ". /viral seguido de um tema foca nele\n"
          "• /thread: 2 threads explicativas com seu olhar de editor, a partir das matérias do BeInCrypto da semana"
@@ -386,6 +387,13 @@ def tratar_atualizacao(db, u: dict):
             texto_seguir, teclado = sugerir(db)
             extra = {"reply_markup": teclado} if teclado else {}
             tg("sendMessage", chat_id=CHAT_ID, text=texto_seguir, disable_web_page_preview=True, **extra)
+        elif texto.lower().startswith("/investidor"):
+            agora = datetime.now(timezone.utc).isoformat()
+            db.table("bot_estado").upsert([{"chave": "gerar:pedido", "valor": agora},
+                                           {"chave": "gerar:quantos", "valor": "3"}]).execute()
+            disparar("coletar-gerar.yml")
+            tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
+               text="🔥 Procurando as notícias mais quentes para investidor agora. Até 3 rascunhos chegam em alguns minutos.")
         elif texto.lower().startswith("/gerar"):
             # Pedido seu: gera mesmo fora do horário e acima do limite diário.
             db.table("bot_estado").upsert({"chave": "gerar:pedido",
@@ -447,6 +455,7 @@ def enviar_pendentes(db):
 MENU = [
     ("viral", "3 comentários sobre notícias do dia. /viral tema foca num assunto"),
     ("thread", "2 threads explicativas das matérias do BeInCrypto. /thread tema foca num assunto"),
+    ("investidor", "3 rascunhos das notícias mais quentes para investidor"),
     ("gerar", "Busca notícias e gera rascunhos agora"),
     ("atualidades", "Assuntos do momento no Brasil"),
     ("respostas", "Abrir meu feed para escolher o que responder"),

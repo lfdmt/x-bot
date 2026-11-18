@@ -186,7 +186,7 @@ def claude_json(pedido: str, sistema: str, schema: dict) -> dict | None:
     return saida.get("structured_output")
 
 
-def gerar_um(fonte: dict, formato: str, ja_cobertos: list[str]) -> dict | None:
+def gerar_um(fonte: dict, formato: str, ja_cobertos: list[str], angulo: str = "") -> dict | None:
     cobertos = "\n".join(f"- {t.splitlines()[0][:140]}" for t in ja_cobertos[-25:]) or "- (none)"
     pedido = (
         "Stories already drafted recently. If this source is about the same event as any of them, "
@@ -197,7 +197,8 @@ def gerar_um(fonte: dict, formato: str, ja_cobertos: list[str]) -> dict | None:
         f"Title: {fonte['titulo']}\n"
         f"Content: {fonte['resumo']}\n"
         f"Post format: {FORMATOS[formato]}\n\n"
-        "Write one post about this."
+        + (f"Why the editor picked it (angle for investors): {angulo}\n\n" if angulo else "") +
+        "Write one post about this, for investors: what it means for their money or positions."
     )
     return claude_json(pedido, system_prompt(), SCHEMA)
 
@@ -417,14 +418,74 @@ def gerar_threads(db, tema: str = "", quantas: int = 2) -> list[dict]:
     return threads
 
 
+SCHEMA_CURADORIA = {
+    "type": "object",
+    "properties": {
+        "escolhidas": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "n": {"type": "integer", "description": "número da notícia na lista"},
+                    "nota": {"type": "integer", "description": "0 a 10: quanto interessa ao investidor brasileiro agora"},
+                    "angulo": {"type": "string", "description": "por que é quente e qual ângulo usar, uma frase"},
+                },
+                "required": ["n", "nota", "angulo"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["escolhidas"],
+    "additionalProperties": False,
+}
+
+CURADORIA = (
+    "You are the editor choosing which stories become posts on the personal X account of the Head of LATAM "
+    "at BeInCrypto. The goal is followers: Brazilian investors (crypto and stock market) should see the post "
+    "and think 'I need to follow this guy to stay on top of things'. Score each story 0 to 10 for how hot it "
+    "is for a Brazilian investor RIGHT NOW.\n\n"
+    "Hot (7 to 10): big money moving and why (Bitcoin or Ether breaking a level, crash, rally, record, "
+    "billions in liquidations or ETF flows); the big players (BlackRock, Strategy/Saylor, big banks, Musk, "
+    "Trump, the Fed, Nubank, Itaú, XP, BTG, Mercado Pago, B3) making a move; anything that hits the Brazilian "
+    "investor's pocket or decisions (Selic, dollar, Ibovespa, crypto tax and Receita rules, CVM, Banco "
+    "Central, new crypto ETF or product from a big Brazilian institution, Drex, stablecoin rules); hacks, "
+    "frauds, collapses and scandals; giant IPOs and deals; a surprising number people will repeat; a story "
+    "people will argue about.\n"
+    "Boring (0 to 4): exchange marketing, trading campaigns and prize promotions, small product launches, "
+    "minor token partnerships, niche protocols, conferences and events, technical upgrades, price predictions "
+    "for small altcoins, listicles ('3 altcoins para ficar de olho'), interviews with unknown people, "
+    "foreign stories with no Brazilian angle.\n"
+    "Several outlets covering the same event means it is hot; score that event once, on the best source. "
+    "Skip stories already covered in recent drafts. Return only stories scoring 6 or more, best first, with "
+    "the angle in Portuguese."
+)
+
+
+def curar(fontes: list[dict], ja_cobertos: list[str]) -> list[tuple[dict, int, str]]:
+    """Uma chamada que ordena as notícias pelo interesse do investidor. Devolve (fonte, nota, ângulo)."""
+    lista = "\n".join(
+        f"[{i}] ({f.get('origem')}, {(f.get('publicado_em') or '')[:16]}) {f['titulo']}: {(f.get('resumo') or '')[:300]}"
+        for i, f in enumerate(fontes, 1)
+    )
+    cobertos = "\n".join(f"- {t.splitlines()[0][:140]}" for t in ja_cobertos[-25:]) or "- (none)"
+    saida = claude_json(f"Recent drafts:\n{cobertos}\n\nStories:\n{lista}", CURADORIA, SCHEMA_CURADORIA) or {}
+    vistas, ordem = set(), []
+    for e in sorted(saida.get("escolhidas", []), key=lambda e: -e["nota"]):
+        if 0 < e["n"] <= len(fontes) and e["n"] not in vistas:
+            vistas.add(e["n"])
+            ordem.append((fontes[e["n"] - 1], e["nota"], e["angulo"]))
+    return ordem
+
+
 def main():
     db = supabase()
+    from datetime import datetime, timedelta, timezone
+    # Só o que saiu nas últimas 36 h: notícia velha não é quente.
+    desde = (datetime.now(timezone.utc) - timedelta(hours=36)).isoformat()
     fontes = (
-        db.table("fontes").select("*").eq("usado", False)
-        .order("publicado_em", desc=True).limit(MAX_TENTATIVAS * 3).execute().data
+        db.table("fontes").select("*").eq("usado", False).gte("publicado_em", desde)
+        .order("publicado_em", desc=True).limit(80).execute().data
     )
-    # Fontes em português primeiro (são as que têm mais chance de importar no Brasil), depois as mais novas.
-    fontes = sorted(fontes, key=lambda f: f.get("idioma") != "pt")[:MAX_TENTATIVAS]
     if not fontes:
         print("[gerador] nenhuma fonte nova")
         return
@@ -437,13 +498,18 @@ def main():
         r["texto"] for r in
         reversed(db.table("rascunhos").select("texto").order("id", desc=True).limit(25).execute().data)
     ]
-    from datetime import datetime, timedelta, timezone
     inicio = datetime.now(timezone(timedelta(hours=-3))).replace(hour=0, minute=0, second=0, microsecond=0)
     hoje = db.table("rascunhos").select("id").not_.is_("fonte_id", "null").gte("criado_em", inicio.isoformat()).execute().data
     pedido = db.table("bot_estado").select("valor").eq("chave", "gerar:pedido").execute().data
     manual = bool(pedido) and datetime.now(timezone.utc) - datetime.fromisoformat(pedido[0]["valor"]) < timedelta(minutes=30)
+    por_execucao = POR_EXECUCAO
     if manual:
         db.table("bot_estado").delete().eq("chave", "gerar:pedido").execute()
+        # /investidor pede 3 rascunhos de uma vez.
+        qtd = db.table("bot_estado").select("valor").eq("chave", "gerar:quantos").execute().data
+        if qtd:
+            db.table("bot_estado").delete().eq("chave", "gerar:quantos").execute()
+            por_execucao = int(qtd[0]["valor"])
     else:
         hora = datetime.now(timezone(timedelta(hours=-3))).hour
         if not HORA_INICIO <= hora < HORA_FIM:
@@ -452,13 +518,25 @@ def main():
         if len(hoje) >= POR_DIA:
             print(f"[gerador] já são {len(hoje)} rascunhos de notícia hoje (limite {POR_DIA})")
             return
+    try:
+        escolhidas = curar(fontes, ja_cobertos)
+    except (RuntimeError, subprocess.TimeoutExpired, json.JSONDecodeError) as e:
+        print(f"[gerador] curadoria falhou ({e}); sigo pela ordem das mais novas")
+        escolhidas = [(f, 0, "") for f in fontes[:MAX_TENTATIVAS]]
+    # Automático só gera do que é quente de verdade (7+); pedido seu aceita a partir de 6.
+    corte = 6 if manual else 7
+    escolhidas = [e for e in escolhidas if e[1] >= corte or not e[2]][:MAX_TENTATIVAS]
+    for f, nota, angulo in escolhidas:
+        print(f"[gerador] nota {nota}: {f['titulo'][:90]} | {angulo}")
+    if not escolhidas:
+        print("[gerador] nada quente para investidor agora")
     criados = 0
-    for fonte in fontes:
-        if criados >= POR_EXECUCAO:
+    for fonte, nota, angulo in escolhidas:
+        if criados >= por_execucao:
             break
         formato = proximo_formato(recentes)
         try:
-            saida = gerar_um(fonte, formato, ja_cobertos)
+            saida = gerar_um(fonte, formato, ja_cobertos, angulo)
         except (RuntimeError, subprocess.TimeoutExpired, json.JSONDecodeError) as e:
             print(f"[gerador] erro em {fonte['url']}: {e}")
             continue
