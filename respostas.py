@@ -273,7 +273,7 @@ def casual(texto: str) -> str:
 
 def ler_post_gratis(tweet_id: str) -> tuple[str, str, bool] | None:
     """Lê o post pelo endpoint público de embed do X, sem gastar crédito da API.
-    Devolve (usuario, texto, tem_midia) ou None se não deu."""
+    Devolve (usuario, texto, tem_midia, idioma) ou None se não deu. idioma é o código do X (en, pt...)."""
     try:
         r = requests.get("https://cdn.syndication.twimg.com/tweet-result",
                          params={"id": tweet_id, "token": "a"}, timeout=15,
@@ -286,7 +286,7 @@ def ler_post_gratis(tweet_id: str) -> tuple[str, str, bool] | None:
     usuario = (d.get("user") or {}).get("screen_name") or ""
     texto = (d.get("note_tweet") or {}).get("note_tweet_results", {}).get("result", {}).get("text") or d.get("text", "")
     texto = re.sub(r"https://t\.co/\S+", "", texto).strip()
-    return usuario, texto, bool(d.get("mediaDetails"))
+    return usuario, texto, bool(d.get("mediaDetails")), d.get("lang") or ""
 
 
 def responder(db, tweet_id: str, autor_link: str):
@@ -298,12 +298,12 @@ def responder(db, tweet_id: str, autor_link: str):
            "Ele pode ser privado ou ter sido apagado.")
         return
     if gratis:
-        usuario, texto, tem_midia = gratis
+        usuario, texto, tem_midia, idioma = gratis
         usuario = usuario or autor_link
     else:
         try:
             resp = cliente_x().get_tweet(tweet_id, user_auth=True, expansions=["author_id"],
-                                         tweet_fields=["note_tweet"], user_fields=["username"])
+                                         tweet_fields=["note_tweet", "lang"], user_fields=["username"])
         except tweepy.TweepyException as e:
             tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Não consegui ler o post {tweet_id}: {e}")
             return
@@ -314,6 +314,7 @@ def responder(db, tweet_id: str, autor_link: str):
         usuario = autor.username if autor else autor_link
         texto = (resp.data.data.get("note_tweet") or {}).get("text") or resp.data.text
         texto, tem_midia = re.sub(r"https://t\.co/\S+", "", texto).strip(), False
+        idioma = resp.data.data.get("lang") or ""
     if not texto:
         tg("sendMessage", chat_id=CHAT_ID, text=(
             f"⚠️ O post de @{usuario} é só {'imagem ou vídeo' if tem_midia else 'link'}, sem texto, "
@@ -321,13 +322,19 @@ def responder(db, tweet_id: str, autor_link: str):
         return
     from seguir import lembrar_autor
     lembrar_autor(db, usuario)
-    sugerir(tweet_id, usuario, texto)
+    sugerir(tweet_id, usuario, texto, idioma=idioma)
 
 
-def sugerir(tweet_id: str, usuario: str, texto: str, contexto: str = ""):
+def sugerir(tweet_id: str, usuario: str, texto: str, contexto: str = "", idioma: str = ""):
     conta = lista_de_perfis().get(usuario.lower(), {})
+    # Post em inglês, resposta em inglês. O idioma vem do próprio X; se ele não souber
+    # (und, só emoji, só link), vale o "em inglês" do perfis_resposta.txt.
+    if idioma and idioma not in ("und", "zxx") and not idioma.startswith("q"):
+        ingles = idioma == "en"
+    else:
+        ingles = conta.get("ingles", False)
     saida = claude_json(f"Post by @{usuario}:\n\"\"\"\n{texto}\n\"\"\"\n\nWrite the 3 replies.",
-                        sistema(conta.get("ingles", False), conta.get("viral", False)), SCHEMA)
+                        sistema(ingles, conta.get("viral", False)), SCHEMA)
     opcoes = [{**o, "texto": casual(o["texto"])} for o in (saida or {}).get("respostas", [])]
     opcoes = [o for o in opcoes if len(o["texto"]) <= LIMITE_TWEET][:3]
     if not opcoes:
