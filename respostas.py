@@ -219,20 +219,19 @@ def atender_pedidos_de_tweet(db):
     enviar_pendentes(db)
 
 
-ANGULOS_NICHO = (
-    "- Write exactly 3 replies, each with a different angle: an insight or LATAM perspective, a "
-    "respectful counterpoint, and a sharp question that invites the author to answer.\n")
-# Virais e atualidades (política, dia a dia, corporativo, startups, geopolítica): o objetivo é a resposta
-# que ganha curtida e vira conversa, muitas vezes pelo humor.
-ANGULOS_VIRAL = (
-    "- This is a viral or trending post (politics, everyday life, corporate world, startups or world "
-    "news). The goal is a reply people like, quote and screenshot, the kind that ends up as a top reply. "
+# Todas as respostas são virais (pedido de 2026-11-19): nada de LATAM, contraponto ou pergunta.
+# O objetivo é a resposta que ganha curtida e vira top reply.
+ANGULOS = (
+    "- The goal is a reply people like, quote and screenshot, the kind that ends up as the top reply. "
     "Write exactly 3 replies, each with a different angle:\n"
-    "  1. Humor: a witty, ironic or meme-style line, very Brazilian Twitter (dry irony, absurd comparison, "
-    "relatable everyday situation, 'quem nunca'). It must be clever, not silly.\n"
-    "  2. Viral: a bold, punchy, relatable take that many people agree with and want to share.\n"
-    "  3. Visão própria: a sharp take from someone who lives business, tech and LATAM, or a question "
-    "that makes people answer. Brazil angle when it fits.\n"
+    "  1. Humor: a witty, ironic or meme-style line (dry irony, absurd comparison, relatable situation). "
+    "Clever, not silly.\n"
+    "  2. Hot take: a bold, punchy opinion that many people agree with and want to share, or that sparks "
+    "a fight in the quotes.\n"
+    "  3. Sacada: a sharp observation nobody in the replies made yet, the 'damn, true' kind, said in one "
+    "short line.\n"
+    "- No questions. No location context: never mention LATAM, Brazil, any country or region, and never "
+    "mention his job, his company or BeInCrypto. The reply must work for any reader anywhere.\n"
     "- Never joke about deaths, victims, war crimes, disasters, illness or human suffering. If the post "
     "is about that, replace the humor angle with a sober, human line.\n"
     "- Politics: aim irony at the situation and at the powerful, never at voters, a people or a religion. "
@@ -246,18 +245,18 @@ def sistema(ingles: bool = False, viral: bool = False) -> str:
     abreviacoes = ("u, ur, rn, imo, tbh, ngl, gonna, kinda, lol" if ingles else
                    "vc, mto, tb, pq, q, pra, tá, msm, td, hj, blz")
     return (
-        "You write replies for the personal X account of the Head of LATAM at BeInCrypto. "
+        "You write replies for the personal X account of a journalist who follows markets, tech and the news. "
         "The voice guide below defines his tone; follow it.\n\n"
         f"<voice_guide>\n{VOZ.read_text(encoding='utf-8')}\n</voice_guide>\n\n"
         "Rules for every reply:\n"
-        f"{ANGULOS_VIRAL if viral else ANGULOS_NICHO}"
+        f"{ANGULOS}"
         f"{idioma}"
         f"- At most {LIMITE_TWEET - 20} characters each. No links, no hashtags, at most one emoji.\n"
         "- Use only facts stated in the post. Never bring outside numbers, names or events: offer "
         "opinion and angle instead.\n"
         "- Add something to the conversation. No empty praise ('great post'), no self promotion.\n"
-        "- angulo is always a 1 to 3 word label in Portuguese (e.g. "
-        + ("'Humor', 'Viral', 'Visão própria'" if viral else "'Visão LATAM', 'Contraponto', 'Pergunta'") + ").\n"
+        "- angulo is always one of the labels "
+        "'Humor', 'Hot take', 'Sacada').\n"
         "- Sound like a real person typing fast on the phone, never like an AI. Standard capitalization (sentences start with a capital letter). Use internet abbreviations where natural: "
         f"{abreviacoes}. Light punctuation: no final period, no em dash, "
         "no semicolon, no colon. Short, usually under 160 characters, one or two sentences.\n"
