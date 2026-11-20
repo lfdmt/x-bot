@@ -209,7 +209,33 @@ def claude_json(pedido: str, sistema: str, schema: dict) -> dict | None:
     return saida.get("structured_output")
 
 
-def gerar_um(fonte: dict, formato: str, ja_cobertos: list[str], angulo: str = "", pilar: str = "") -> dict | None:
+# Alguns posts (não todos) contam de onde ele leu, como gente falando: "tava lendo isso na Bloomberg...".
+CHANCE_LEITURA = float(os.getenv("CHANCE_LEITURA", "0.33"))
+VEICULOS = {"Bloomberg Tech": "Bloomberg", "TechCrunch AI": "TechCrunch", "TechCrunch Venture": "TechCrunch",
+            "TechCrunch Fintech": "TechCrunch", "BeInCrypto Brasil": "BeInCrypto", "MIT Tech Review Brasil": "MIT Tech Review"}
+
+
+def veiculo(fonte: dict) -> str:
+    origem = fonte.get("origem") or ""
+    return VEICULOS.get(origem, origem)
+
+
+def modo_leitura(fonte: dict) -> str:
+    return (
+        f"Write this one as something he just read: mention casually, like a person talking, that he read "
+        f"it in {veiculo(fonte)} and found it interesting, then the fact and his take. Vary the wording, for "
+        f"example 'Tava lendo isso na {veiculo(fonte)} e fiquei com uma coisa na cabeça', 'Po, li agora na "
+        f"{veiculo(fonte)} e achei curioso', 'Essa da {veiculo(fonte)} hoje é boa'. Use the right article for "
+        "the outlet (na Bloomberg, no Valor, na TechCrunch). Never say 'segundo a' or sound like a citation; "
+        "do not copy these examples word for word, and never reuse the opening of any recent draft listed above. "
+        "Still no link.\n\n"
+    )
+
+
+def gerar_um(fonte: dict, formato: str, ja_cobertos: list[str], angulo: str = "", pilar: str = "",
+             leitura: bool | None = None) -> dict | None:
+    if leitura is None:
+        leitura = fonte.get("tipo") == "noticia" and bool(fonte.get("origem")) and random.random() < CHANCE_LEITURA
     cobertos = "\n".join(f"- {t.splitlines()[0][:140]}" for t in ja_cobertos[-25:]) or "- (none)"
     pedido = (
         "Stories already drafted recently. If this source is about the same event as any of them, "
@@ -221,7 +247,8 @@ def gerar_um(fonte: dict, formato: str, ja_cobertos: list[str], angulo: str = ""
         f"Content: {fonte['resumo']}\n"
         f"Post format: {FORMATOS[formato]}\n\n"
         + (f"Pillar: {pilar}\n" if pilar else "")
-        + (f"Why the editor picked it (suggested angle): {angulo}\n\n" if angulo else "\n") +
+        + (f"Why the editor picked it (suggested angle): {angulo}\n\n" if angulo else "\n")
+        + (modo_leitura(fonte) if leitura else "") +
         "Write one post about this."
     )
     return claude_json(pedido, system_prompt(), SCHEMA)
