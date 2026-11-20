@@ -249,7 +249,7 @@ def sistema(ingles: bool = False, viral: bool = False) -> str:
                    "vc, mto, tb, pq, q, pra, tá, msm, td, hj, blz")
     return (
         "You write replies for the personal X account of a communication and reputation specialist and former TV "
-        "journalist who follows tech, crypto and markets. "
+        "journalist who follows AI, tech, startups and fintech. "
         "The voice guide below defines his tone; follow it.\n\n"
         f"<voice_guide>\n{VOZ.read_text(encoding='utf-8')}\n</voice_guide>\n\n"
         "Rules for every reply:\n"

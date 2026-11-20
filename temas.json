@@ -3,21 +3,21 @@
   "pilares": [
     {
       "id": "inovacao",
-      "nome": "Inovação e Vale do Silício",
-      "peso": 30,
-      "descricao": "big techs, IA, fundadores, cultura de startup, venture capital"
+      "nome": "Inovação, IA e Vale do Silício",
+      "peso": 45,
+      "descricao": "IA (modelos, produtos, agentes, a corrida entre OpenAI, Anthropic, Google, Meta), big techs, fundadores, cultura de startup, rodadas e venture capital"
     },
     {
-      "id": "cripto",
-      "nome": "Cripto e fintech",
-      "peso": 35,
-      "descricao": "stablecoins, pagamentos, regulação, adoção na América Latina, com o olhar de quem cobriu o mercado por dentro"
+      "id": "fintech",
+      "nome": "Fintech e cripto",
+      "peso": 25,
+      "descricao": "fintechs e bancos digitais, pagamentos, Pix e open finance, stablecoins como produto, rodadas de fintech, regulação que muda produto. Preço de cripto e fluxo de ETF ficam de fora"
     },
     {
       "id": "pontes",
-      "nome": "Pontes entre os dois mundos",
-      "peso": 20,
-      "descricao": "big techs entrando em cripto, IA em finanças, investimento em startups da América Latina"
+      "nome": "Pontes entre tech e finanças",
+      "peso": 15,
+      "descricao": "big techs entrando em pagamentos e cripto, IA aplicada a bancos e finanças, investimento em startups da América Latina"
     },
     {
       "id": "comunicacao",

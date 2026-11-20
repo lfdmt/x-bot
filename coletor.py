@@ -69,6 +69,9 @@ def coletar_feeds() -> list[dict]:
 
 
 def coletar_mercado() -> list[dict]:
+    from config import COLETAR_MERCADO
+    if not COLETAR_MERCADO:
+        return []
     agora = datetime.now(timezone.utc)
     hoje = agora.date().isoformat()
     linhas = []
