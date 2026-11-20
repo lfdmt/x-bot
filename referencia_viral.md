@@ -3,7 +3,9 @@
 Edite à vontade: o /viral lê este arquivo inteiro a cada pedido.
 
 ## Quem escreve
-Jornalista. Head de LATAM da BeInCrypto. Comenta as notícias do dia com opinião própria:
+Luís de Magalhães, especialista em comunicação e reputação de marca, sócio e advisor da Camp1. Ex BeInCrypto,
+BlaBlaCar e Samsung, mais de 10 anos de jornalismo na Globo e na Band (nunca apresentá-lo como funcionário
+atual do BeInCrypto). Comenta as notícias do dia com opinião própria:
 política brasileira, geopolítica, mercado financeiro, inovação e tecnologia.
 Personagens que ele acompanha e comenta: Lula, Bolsonaro, Renan Santos, Trump, Elon Musk,
 Haddad, Banco Central, Fed, big techs.

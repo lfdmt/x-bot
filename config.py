@@ -7,19 +7,30 @@ from supabase import Client, create_client
 
 load_dotenv()
 
-# (origem, idioma, url)
+# (origem, idioma, url). Os pilares e pesos ficam em temas.json; a curadoria decide o pilar de cada matéria.
 FEEDS = [
+    # Cripto e fintech (o BeInCrypto segue como fonte de notícia, não como empregador)
     ("BeInCrypto Brasil", "pt", "https://br.beincrypto.com/feed/"),
-    ("BeInCrypto Español", "es", "https://es.beincrypto.com/feed/"),
-    ("BeInCrypto", "en", "https://beincrypto.com/feed/"),  # no lugar de ler o @beincrypto pela API paga
+    ("BeInCrypto", "en", "https://beincrypto.com/feed/"),
     ("Livecoins", "pt", "https://livecoins.com.br/feed/"),
     ("Portal do Bitcoin", "pt", "https://portaldobitcoin.uol.com.br/feed/"),
-    # Mercado brasileiro: Ibovespa, dólar, Selic, bancos e fintechs.
-    ("InfoMoney", "pt", "https://www.infomoney.com.br/feed/"),
-    ("g1 Economia", "pt", "https://g1.globo.com/rss/g1/economia/"),
     ("CoinDesk", "en", "https://www.coindesk.com/arc/outboundfeeds/rss/"),
     ("Cointelegraph", "en", "https://cointelegraph.com/rss"),
     ("Decrypt", "en", "https://decrypt.co/feed"),
+    ("InfoMoney", "pt", "https://www.infomoney.com.br/feed/"),
+    # Inovação e Vale do Silício
+    ("TechCrunch", "en", "https://techcrunch.com/feed/"),
+    ("The Verge", "en", "https://www.theverge.com/rss/index.xml"),
+    ("Bloomberg Tech", "en", "https://feeds.bloomberg.com/technology/news.rss"),
+    ("Crunchbase News", "en", "https://news.crunchbase.com/feed/"),
+    ("Neofeed", "pt", "https://neofeed.com.br/feed/"),
+    ("Startups.com.br", "pt", "https://startups.com.br/feed/"),
+    ("MIT Tech Review Brasil", "pt", "https://mittechreview.com.br/feed/"),
+    # Comunicação e reputação
+    ("Meio & Mensagem", "pt", "https://www.meioemensagem.com.br/feed"),
+    ("B9", "pt", "https://www.b9.com.br/feed/"),
+    ("Adweek", "en", "https://www.adweek.com/feed/"),
+    ("Fast Company", "en", "https://www.fastcompany.com/latest/rss"),
 ]
 
 # Perfis do X lidos como pauta (cada post lido custa cerca de US$ 0,005 na API do X).

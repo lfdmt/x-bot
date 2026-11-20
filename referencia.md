@@ -1,6 +1,6 @@
-# Referência de formatos: @beincrypto (adaptado para português)
+# Referência de formatos de notícia no X (adaptado para português)
 
-Levantado a partir de 20 posts recentes do @beincrypto em 2026-11-02. Use como repertório de formatos.
+Levantado em 2026-11-02 a partir de 20 posts de uma conta grande de notícias cripto. Use só como repertório de formatos.
 O voz.md continua mandando no tom: estes formatos servem o gancho, não substituem a frase de impacto.
 
 ## Padrões que se repetem
@@ -11,9 +11,9 @@ O voz.md continua mandando no tom: estes formatos servem o gancho, não substitu
 - Etiquetas de urgência em notícia quente: "AGORA:", "ALERTA:", "ATUALIZAÇÃO:". Só quando for de fato recente.
 - Manchete em CAIXA ALTA na primeira linha, seguida de 1 ou 2 linhas de contexto.
 - Comparação em forma de pergunta: "Ouro ou ouro digital? Nenhum dos dois funcionou em outubro."
-- Humor leve quando o assunto permite (um emoji no máximo).
+- Humor leve quando o assunto permite, sem emoji de enfeite.
 
-## Formato "empresas com logo" (x.com/beincrypto/status/2117242340058501609)
+## Formato "empresas com logo" 
 Quando a notícia é sobre empresas ou projetos conhecidos, o post marca as empresas com @, usa cashtags
 para ações e tokens ($STRC, $ASST) e vem com um card quadrado com o logo de cada empresa.
 A primeira frase diz o que aconteceu; a seguinte traz os números.
@@ -23,7 +23,7 @@ Exemplo adaptado (dentro de 280 caracteres):
 
 A Strategy levou 811 $BTC por US$ 63 milhões. A Strive somou 124 e já tem 43.124 no caixa.
 
-Empresa listada comprando Bitcoin virou rotina, não manchete.
+Empresa listada comprando Bitcoin já virou rotina de terça.
 
 ## Exemplos em português (formato, não fatos)
 AGORA: Mercado Bitcoin suspende depósitos e saques após incidente de segurança.

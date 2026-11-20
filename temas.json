@@ -1,0 +1,29 @@
+{
+  "_leia_me": "Pilares do conteúdo do @LuisDeMaga. 'peso' é a fatia de cada pilar (em %) no ranking do /post e nos rascunhos automáticos. Mude aqui e faça commit, ou ajuste pelo Telegram com /temas (o que você ajusta no Telegram vale por cima deste arquivo; /temas padrao volta para estes valores).",
+  "pilares": [
+    {
+      "id": "inovacao",
+      "nome": "Inovação e Vale do Silício",
+      "peso": 30,
+      "descricao": "big techs, IA, fundadores, cultura de startup, venture capital"
+    },
+    {
+      "id": "cripto",
+      "nome": "Cripto e fintech",
+      "peso": 35,
+      "descricao": "stablecoins, pagamentos, regulação, adoção na América Latina, com o olhar de quem cobriu o mercado por dentro"
+    },
+    {
+      "id": "pontes",
+      "nome": "Pontes entre os dois mundos",
+      "peso": 20,
+      "descricao": "big techs entrando em cripto, IA em finanças, investimento em startups da América Latina"
+    },
+    {
+      "id": "comunicacao",
+      "nome": "Comunicação e reputação",
+      "peso": 15,
+      "descricao": "erros de PR, crises de marca, como startups e empresas de tecnologia contam suas histórias"
+    }
+  ]
+}

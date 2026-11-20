@@ -248,7 +248,8 @@ def sistema(ingles: bool = False, viral: bool = False) -> str:
     abreviacoes = ("u, ur, rn, imo, tbh, ngl, gonna, kinda, lol" if ingles else
                    "vc, mto, tb, pq, q, pra, tá, msm, td, hj, blz")
     return (
-        "You write replies for the personal X account of a journalist who follows markets, tech and the news. "
+        "You write replies for the personal X account of a communication and reputation specialist and former TV "
+        "journalist who follows tech, crypto and markets. "
         "The voice guide below defines his tone; follow it.\n\n"
         f"<voice_guide>\n{VOZ.read_text(encoding='utf-8')}\n</voice_guide>\n\n"
         "Rules for every reply:\n"
@@ -263,14 +264,16 @@ def sistema(ingles: bool = False, viral: bool = False) -> str:
         "- Sound like a real person typing fast on the phone, never like an AI. Standard capitalization (sentences start with a capital letter). Use internet abbreviations where natural: "
         f"{abreviacoes}. Light punctuation: no final period, no em dash, "
         "no semicolon, no colon. Short, usually under 160 characters, one or two sentences.\n"
-        "- Avoid AI tells: 'não é X, é Y', 'isso mostra que', 'vale lembrar', 'em suma', 'o ponto é', "
-        "lists of three, polished parallel sentences, starting with 'Excelente' or 'Interessante'."
+        "- Avoid AI tells: 'não é X, é Y' (and variations), 'isso mostra que', 'vale lembrar', 'em suma', 'o ponto é', "
+        "lists of three, polished parallel sentences, starting with 'Excelente' or 'Interessante'. No hashtags, no "
+        "decorative emoji, no hyphens as punctuation."
     )
 
 
 def casual(texto: str) -> str:
     """Garante o tom digitado no celular: sem travessão nem ponto final. A caixa das letras fica como veio."""
-    return texto.replace(" — ", ", ").replace(" – ", ", ").replace("—", ",").strip().rstrip(".")
+    from gerador import sem_travessao
+    return sem_travessao(texto).rstrip(".")
 
 
 def ler_post_gratis(tweet_id: str) -> tuple[str, str, bool] | None:
@@ -514,6 +517,71 @@ def atender_virais(db):
             tg("sendMessage", chat_id=CHAT_ID, text="⚠️ Não saiu nenhum tweet bom. Mande /viral de novo.")
 
 
+def atender_posts(db):
+    """/post: o ranking do jeito do LinkedIn, 10 matérias com nota e pilar. Você toca no número e eu escrevo."""
+    from gerador import contexto_recente, curar, fontes_recentes, ranking
+    from temas import nome
+
+    for p in db.table("bot_estado").select("*").like("chave", "pedido_post:%").execute().data:
+        db.table("bot_estado").delete().eq("chave", p["chave"]).execute()
+        tema = p["valor"].strip()
+        fontes = fontes_recentes(db, 48, so_novas=False)
+        if not fontes:
+            tg("sendMessage", chat_id=CHAT_ID, text="⚠️ Nenhuma matéria nas últimas 48 h. A coleta roda a cada 3 h.")
+            continue
+        try:
+            _, ja_cobertos = contexto_recente(db)
+            lista = ranking(db, curar(db, fontes, ja_cobertos, tema))
+        except Exception as e:
+            tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Falha ao montar o ranking: {e}")
+            continue
+        if not lista:
+            tg("sendMessage", chat_id=CHAT_ID, text="Não achei matéria boa" + (f" sobre {tema}" if tema else "") +
+               " nas últimas 48 h.")
+            continue
+        salvo = [{"fonte_id": c["fonte"]["id"], "pilar": c["pilar"], "nota": c["nota"], "angulo": c["angulo"]}
+                 for c in lista]
+        linhas = [f"🏆 <b>Ranking de posts{' sobre ' + html.escape(tema) if tema else ''}</b> "
+                  f"({len(fontes)} matérias lidas). Toque no número para eu escrever o rascunho.\n"]
+        for i, c in enumerate(lista, 1):
+            f = c["fonte"]
+            linhas.append(f"<b>{i}. {c['nota']}/10</b> · {html.escape(nome(c['pilar']))}\n"
+                          f"<a href=\"{html.escape(f['url'])}\">{html.escape(f['titulo'][:110])}</a> "
+                          f"({html.escape(f.get('origem') or '')})\n↳ <i>{html.escape(c['angulo'])}</i>\n")
+        botoes = [{"text": str(i), "callback_data": f"rank:{i - 1}"} for i in range(1, len(lista) + 1)]
+        enviada = tg("sendMessage", chat_id=CHAT_ID, text="\n".join(linhas), parse_mode="HTML",
+                     disable_web_page_preview=True,
+                     reply_markup={"inline_keyboard": [botoes[k:k + 5] for k in range(0, len(botoes), 5)]})
+        if enviada:
+            db.table("bot_estado").upsert({"chave": f"ranking:{enviada['message_id']}",
+                                           "valor": json.dumps(salvo, ensure_ascii=False)}).execute()
+
+
+def atender_ranking(db):
+    """Matérias escolhidas no ranking do /post: vira rascunho com os botões de sempre."""
+    from gerador import contexto_recente, escrever
+    from telegram_bot import enviar_pendentes
+
+    for p in db.table("bot_estado").select("*").like("chave", "pedido_rank:%").execute().data:
+        db.table("bot_estado").delete().eq("chave", p["chave"]).execute()
+        item = json.loads(p["valor"])
+        fonte = db.table("fontes").select("*").eq("id", item["fonte_id"]).execute().data
+        if not fonte:
+            tg("sendMessage", chat_id=CHAT_ID, text="⚠️ Essa matéria não está mais na base.")
+            continue
+        recentes, ja_cobertos = contexto_recente(db)
+        try:
+            ok = escrever(db, fonte[0], item["angulo"], item["pilar"], recentes, ja_cobertos)
+        except Exception as e:
+            tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Falha ao escrever: {e}")
+            continue
+        if ok:
+            enviar_pendentes(db)
+        else:
+            tg("sendMessage", chat_id=CHAT_ID, text=f"⚠️ Não saiu um post bom sobre \"{fonte[0]['titulo'][:80]}\". "
+               "Tente outro número do ranking.")
+
+
 def mostrar_thread(t: dict):
     """Uma mensagem por thread, cada tweet em <code> (no Telegram, um toque copia)."""
     total = len(t["tweets"])
@@ -576,7 +644,9 @@ def main():
         tem = bool(pendentes or pedidos_de_tweet(db) or
                    db.table("bot_estado").select("chave").like("chave", "pedido_a%").execute().data or
                    db.table("bot_estado").select("chave").like("chave", "pedido_viral:%").execute().data or
-                   db.table("bot_estado").select("chave").like("chave", "pedido_thread:%").execute().data)
+                   db.table("bot_estado").select("chave").like("chave", "pedido_thread:%").execute().data or
+                   db.table("bot_estado").select("chave").like("chave", "pedido_post:%").execute().data or
+                   db.table("bot_estado").select("chave").like("chave", "pedido_rank:%").execute().data)
         saida = os.getenv("GITHUB_OUTPUT")
         if saida:
             with open(saida, "a") as f:
@@ -588,6 +658,8 @@ def main():
     atender_pedidos_de_tweet(db)
     atender_virais(db)
     atender_threads(db)
+    atender_posts(db)
+    atender_ranking(db)
     for tweet_id in pendentes:
         valor = db.table("bot_estado").select("valor").eq("chave", f"pedido_resposta:{tweet_id}").execute().data
         db.table("bot_estado").delete().eq("chave", f"pedido_resposta:{tweet_id}").execute()

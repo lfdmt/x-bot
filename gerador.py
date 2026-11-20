@@ -26,6 +26,7 @@ HORA_INICIO, HORA_FIM = 7, 23
 MAX_TENTATIVAS = int(os.getenv("MAX_TENTATIVAS", "15"))
 VOZ = Path(__file__).with_name("voz.md")
 REFERENCIA = Path(__file__).with_name("referencia.md")
+PILARES_IDS = [p["id"] for p in json.loads(Path(__file__).with_name("temas.json").read_text(encoding="utf-8"))["pilares"]]
 
 SCHEMA = {
     "type": "object",
@@ -45,6 +46,32 @@ SCHEMA = {
     "required": ["publicar", "motivo", "tweet", "gif_busca", "perfis"],
     "additionalProperties": False,
 }
+
+
+# Posicionamento desde 2026-11-20: saiu do BeInCrypto. Nada pode apresentá-lo como funcionário de lá.
+PERSONA = (
+    "Luís de Magalhães (@LuisDeMaga): communication and brand reputation specialist, partner and advisor "
+    "at Camp1 (a B2B PR agency for startups), formerly at BeInCrypto (where he was Head of LATAM and covered "
+    "crypto from inside), BlaBlaCar and Samsung, with more than 10 years of TV journalism at Globo and Band. "
+    "Never present him as currently working at BeInCrypto; if it matters, he is ex-BeInCrypto. Never make "
+    "the post about himself or his agency: his background shows in the quality of the read, not in "
+    "self promotion."
+)
+
+REGRAS_ESCRITA = (
+    "- Never use em dashes, en dashes or hyphens as punctuation; use periods, commas, colons or parentheses.\n"
+    "- Never use the 'não é X, é Y' construction or any variation ('não é sobre X, é sobre Y', 'X não é A. "
+    "É B.', 'menos X, mais Y' as a contrast formula).\n"
+    "- At most one hashtag, and only if it really makes sense (usually none). No decorative emojis.\n"
+    "- Tone: direct and opinionated, a journalist who saw the market from inside. No lecture, no hype.\n"
+)
+
+
+def sem_travessao(texto: str) -> str:
+    """Rede de segurança das regras de escrita: travessão ou hífen solto como pontuação vira vírgula."""
+    for t in (" — ", " – ", " - "):
+        texto = texto.replace(t, ", ")
+    return texto.replace("—", ", ").replace("–", ", ").strip()
 
 
 CASHTAG = (
@@ -73,40 +100,36 @@ GANCHO = (
 
 
 def system_prompt() -> str:
+    from temas import para_prompt
     return (
-        "You write posts for the personal X account of the Head of LATAM at BeInCrypto. "
-        "The voice guide below defines tone, themes and hard limits; follow it strictly.\n\n"
+        f"You write posts for the personal X account of {PERSONA}\n\n"
+        "The voice guide below defines tone and hard limits; follow it strictly.\n\n"
         f"<voice_guide>\n{VOZ.read_text(encoding='utf-8')}\n</voice_guide>\n\n"
-        "The reference below shows formats that work on @beincrypto, adapted to Portuguese. "
+        "The reference below shows formats that work for news on X, adapted to Portuguese. "
         "Use them as a repertoire; the voice guide still wins on tone.\n\n"
         f"<format_reference>\n{REFERENCIA.read_text(encoding='utf-8')}\n</format_reference>\n\n"
+        f"The account's content pillars:\n{para_prompt(None)}\n\n"
         "Rules for every post:\n"
-        f"- Brazilian Portuguese only, at most {LIMITE_TWEET - 10} characters.\n"
+        f"- Brazilian Portuguese only, at most {LIMITE_TWEET - 10} characters. A short, strong single post.\n"
         "- No links or URLs, and do not tell readers to click or read the article: the post stands alone.\n"
-        "- Sources come in Portuguese, Spanish or English: news articles, market data, or posts from @beincrypto. "
-        "Always write in Portuguese, in your own words; never translate a source post line by line.\n"
+        "- Sources come in Portuguese, Spanish or English. Always write in Portuguese, in your own words; "
+        "never translate a source line by line.\n"
         "- Only state facts present in the source. Never invent numbers, quotes or predictions.\n"
-        "- If the source falls outside the themes or touches a limit in the guide, set publicar=false.\n"
+        "- If the source fits none of the pillars, is minor, or touches a limit in the guide, set publicar=false.\n"
+        f"{REGRAS_ESCRITA}"
         f"{GANCHO}\n"
         f"{CASHTAG}"
-        "- After the hook, the fact, briefly, then his take "
-        "in one sentence: what it means for Brazil or for people's money, a contradiction, a comparison, or "
-        "what nobody is saying. Never a neutral headline. Never the 'O detalhe:' / 'O motivo:' portal "
-        "formula. A take is an opinion clearly framed as his, never a new fact.\n"
-        "- Avoid AI tells in the take: 'não é X, é Y', 'é X, não Y', 'isso mostra que', 'vale lembrar', "
+        "- After the hook, the fact, briefly, then his take in one sentence, from someone who covered "
+        "markets from inside and now works on communication and reputation: what it means for founders, "
+        "investors, the market or the brand involved, a contradiction, a comparison, what the coverage is "
+        "missing, or how the company is telling (or botching) its story. Never a neutral headline. Never the "
+        "'O detalhe:' / 'O motivo:' portal formula. A take is an opinion clearly framed as his, never a new fact.\n"
+        "- When it fits naturally, connect to Brazil or Latin America (adoption, regulation, local startups, "
+        "the real). Foreign stories are welcome when they matter to people who follow tech, crypto and markets.\n"
+        "- Avoid AI tells in the take: 'é X, não Y', 'isso mostra que', 'vale lembrar', "
         "polished parallel sentences, lists of three.\n"
         "- Sometimes (about one post in three) end with a short, real question that invites replies, "
         "or take a clear side on something debatable. No generic 'o que vocês acham?'.\n"
-        "- MANDATORY: the story must be relevant in Brazil. Publish only if (a) it is about Brazil: "
-        "Brazilian companies, banks, fintechs, exchanges, B3, Ibovespa, real/dollar, Selic, Banco Central, "
-        "CVM, Receita, Congress, government, Brazilian politicians or Brazilian users; or (b) it is a big "
-        "global move that hits Brazilians directly and that Brazilians are talking about: Bitcoin or "
-        "Ether price swings, the Fed, Trump or Musk decisions with market impact, a major hack or failure "
-        "of an exchange widely used in Brazil (Binance, etc.). In case (b) the post must spell out the "
-        "Brazilian angle (the real, Brazilian investors, local exchanges, Brazilian rules). Everything "
-        "else from abroad is publicar=false: a foreign fund's purchase, a US or Asian bill, a token "
-        "partnership, a company treasury, a foreign startup, a niche protocol hack, foreign tech news. "
-        "When in doubt, publicar=false and say in motivo why it lacks Brazilian relevance.\n"
         "- Each request names the post format. Write for that format; any media complements the text and "
         "is never described by it."
     )
@@ -186,7 +209,7 @@ def claude_json(pedido: str, sistema: str, schema: dict) -> dict | None:
     return saida.get("structured_output")
 
 
-def gerar_um(fonte: dict, formato: str, ja_cobertos: list[str], angulo: str = "") -> dict | None:
+def gerar_um(fonte: dict, formato: str, ja_cobertos: list[str], angulo: str = "", pilar: str = "") -> dict | None:
     cobertos = "\n".join(f"- {t.splitlines()[0][:140]}" for t in ja_cobertos[-25:]) or "- (none)"
     pedido = (
         "Stories already drafted recently. If this source is about the same event as any of them, "
@@ -197,8 +220,9 @@ def gerar_um(fonte: dict, formato: str, ja_cobertos: list[str], angulo: str = ""
         f"Title: {fonte['titulo']}\n"
         f"Content: {fonte['resumo']}\n"
         f"Post format: {FORMATOS[formato]}\n\n"
-        + (f"Why the editor picked it (angle for investors): {angulo}\n\n" if angulo else "") +
-        "Write one post about this, for investors: what it means for their money or positions."
+        + (f"Pillar: {pilar}\n" if pilar else "")
+        + (f"Why the editor picked it (suggested angle): {angulo}\n\n" if angulo else "\n") +
+        "Write one post about this."
     )
     return claude_json(pedido, system_prompt(), SCHEMA)
 
@@ -222,7 +246,7 @@ def gerar_pedido(db, instrucao: str, origem: str = "pedido seu no Telegram") -> 
     fonte = {"tipo": "noticia", "url": "", "imagem_url": None}
     midia_tipo, midia_urls = resolver_midia(fonte, formato, saida)
     linha = db.table("rascunhos").insert({
-        "texto": saida["tweet"].strip(), "link": origem, "status": "pendente",
+        "texto": sem_travessao(saida["tweet"]), "link": origem, "status": "pendente",
         "midia_tipo": midia_tipo, "midia_urls": midia_urls,
     }).execute().data
     return linha[0]["id"] if linha else None
@@ -270,7 +294,8 @@ def sistema_viral() -> str:
         "- Comment, never summarize: no 'X anunciou que' as the whole tweet, no neutral news report.\n"
         "- Never invent facts, numbers, quotes or events. Use only what the headlines say. Never put words "
         "in a real person's mouth.\n"
-        "- No links, no hashtags, emoji only if it really adds.\n"
+        "- No links, no hashtags, no decorative emoji.\n"
+        "- Never use hyphens as punctuation and never the 'não é X, é Y' construction or its variations.\n"
         "- Crypto at most once in a while (the account already posts crypto news).\n"
         "- Never joke about deaths, victims, disasters, illness or suffering.\n"
         "- Write like he types: standard capitalization, light punctuation (no final period, no em dash, "
@@ -335,79 +360,82 @@ SCHEMA_THREADS = {
 }
 
 
-def sistema_thread() -> str:
+def sistema_thread(db=None) -> str:
+    from temas import para_prompt
     return (
-        "You write X threads for the personal account of the Head of LATAM at BeInCrypto: a journalist and "
-        "editor, a media man who reads every story the newsroom publishes. The voice guide below defines his "
-        "tone; follow it.\n\n"
+        f"You write X threads for the personal account of {PERSONA}\n\n"
+        "The voice guide below defines his tone; follow it.\n\n"
         f"<voice_guide>\n{VOZ.read_text(encoding='utf-8')}\n</voice_guide>\n\n"
-        "What a thread is for: explain one subject so well that people read to the end, save it and share it. "
-        "Long dwell time, not hot takes. Pick subjects where BeInCrypto stories, read together, tell a bigger "
-        "story than any single headline: a trend across several articles, a mechanism people use but do not "
-        "understand (how a hack happened, why the price moved, what a rule changes, how a product makes "
-        "money), a before and after, or a 'what nobody explained' angle.\n\n"
-        "His point of view as editor: he sees the whole flow of news, so he can say what the coverage keeps "
-        "missing, which story is bigger than it looks, what readers keep asking, how to read a headline "
-        "like this. Use that lens in one or two tweets, never as self promotion, never mentioning internal "
-        "newsroom data he would not have.\n\n"
-        "Structure:\n"
+        f"The account's content pillars:\n{para_prompt(db)}\n\n"
+        "What a thread is for: explain one subject so well that people read to the end, save it, share it and "
+        "follow him for the next one. Long dwell time, not hot takes. Pick subjects where several stories, "
+        "read together, tell a bigger story than any single headline: a trend, a mechanism people use but do "
+        "not understand (how a hack happened, why a price moved, what a rule changes, how a product makes "
+        "money), a before and after, or how a company told (or botched) its story.\n\n"
+        "His lens: he covered tech, crypto and markets from inside a newsroom and now works on communication "
+        "and reputation, so he can say what the coverage keeps missing, which story is bigger than it looks, "
+        "and what the communication behind the move reveals. Use that lens in one or two tweets, never as "
+        "self promotion.\n\n"
+        "Structure (5 to 8 tweets in total):\n"
         "- Tweet 1 is the hook: a human first line (a surprising fact, a contradiction, a question everyone "
-        "has) and a clear promise of what the reader will understand by the end. End it with 🧵. No "
-        "'Segue o fio', no 'Thread:', no clickbait clichés ('URGENTE', 'Ninguém está falando sobre isso').\n"
-        "- Then 5 to 8 tweets that build the explanation step by step: context, how it works, the numbers, "
-        "who wins and who loses, what it means for Brazil and for people's money. Each tweet must make sense "
-        "alone and make the next one tempting; one idea per tweet.\n"
-        "- The last tweet closes with his own read in one or two sentences and a real question that invites "
-        "replies. No 'gostou? me segue', no 'RT se ajudou'.\n\n"
+        "has) and a clear promise of what the reader will understand by the end. No 'Segue o fio', no "
+        "'Thread:', no emoji, no clickbait clichés ('URGENTE', 'Ninguém está falando sobre isso').\n"
+        "- The middle tweets build the explanation step by step: context, how it works, the numbers, who "
+        "wins and who loses, what it means for founders, investors or Latin America. Each tweet makes sense "
+        "alone and makes the next one tempting; one idea per tweet.\n"
+        "- The last tweet closes with his own read in one or two sentences and a natural invitation to follow "
+        "him for more on the subject (e.g. 'Se curte esse tipo de explicação, me segue que eu sigo destrinchando "
+        "por aqui'). Vary the wording; no 'RT se ajudou'.\n\n"
         "Rules:\n"
-        f"- Brazilian Portuguese, each tweet at most {LIMITE_TWEET - 10} characters. No numbering like '1/7' "
-        "(the bot adds it). No links, no hashtags, emoji only where it really helps.\n"
+        f"- Brazilian Portuguese, each tweet at most {LIMITE_TWEET - 30} characters (count them: X cuts at "
+        f"{LIMITE_TWEET}). No numbering like '1/7' (the bot adds it). No links.\n"
+        f"{REGRAS_ESCRITA}"
         "- Only facts, numbers and quotes that appear in the stories given. Never invent. When explaining a "
-        "general concept (what a stablecoin is, how a halving works) you may use common knowledge, stated "
-        "plainly and without new numbers.\n"
-        "- Always spell out the Brazilian angle: the real, Brazilian investors and exchanges, Banco Central, "
-        "CVM, Receita, Brazilian rules or habits.\n"
+        "general concept (what a stablecoin is, how a funding round works) you may use common knowledge, "
+        "stated plainly and without new numbers.\n"
         f"{CASHTAG}"
-        "- Avoid AI tells: 'não é X, é Y', 'isso mostra que', 'vale lembrar', 'em resumo', 'o ponto é', "
+        "- Avoid AI tells: 'isso mostra que', 'vale lembrar', 'em resumo', 'o ponto é', "
         "lists of three, polished parallel sentences, lecture tone. Write like a smart person explaining "
         "to a friend.\n"
-        "- Each thread uses a different subject. In fontes, list the numbers of the stories it is based on."
+        "- Each thread uses a different subject, preferably from different pillars, favouring the pillars "
+        "with more weight. In fontes, list the numbers of the stories it is based on."
     )
 
 
 def gerar_threads(db, tema: str = "", quantas: int = 2) -> list[dict]:
-    """Sugestões de thread explicativa a partir das matérias do BeInCrypto dos últimos 7 dias."""
+    """Sugestões de thread explicativa a partir das matérias de todos os feeds dos últimos 5 dias."""
     from datetime import datetime, timedelta, timezone
-    desde = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    from temas import pilares
+    desde = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
     materias = (
         db.table("fontes").select("titulo,resumo,url,publicado_em,origem")
-        .ilike("origem", "BeInCrypto%").eq("tipo", "noticia").gte("publicado_em", desde)
-        .order("publicado_em", desc=True).limit(80).execute().data
+        .eq("tipo", "noticia").gte("publicado_em", desde)
+        .order("publicado_em", desc=True).limit(160).execute().data
     )
-    # Português primeiro, depois as mais novas.
-    materias = sorted(materias, key=lambda m: m.get("origem") != "BeInCrypto Brasil")[:60]
     if not materias:
         return []
     lista = "\n".join(
-        f"[{i}] ({(m.get('publicado_em') or '')[:10]}, {m['origem']}) {m['titulo']}: {(m.get('resumo') or '')[:400]}"
+        f"[{i}] ({(m.get('publicado_em') or '')[:10]}, {m['origem']}) {m['titulo']}: {(m.get('resumo') or '')[:220]}"
         for i, m in enumerate(materias, 1)
     )
+    pesos = ", ".join(f"{p['nome']} {p['peso']}%" for p in pilares(db))
     feitas = db.table("bot_estado").select("valor").eq("chave", "threads:temas").execute().data
     anteriores = json.loads(feitas[0]["valor"]) if feitas else []
     pedido = (
         (f"Subject requested by the account owner: \"{tema}\". Every thread must be about it, using the "
          "stories that touch it.\n\n" if tema else
-         "Choose the subjects with the most explanatory potential and the most interest for Brazilians.\n\n") +
-        f"BeInCrypto stories from the last 7 days:\n{lista}\n\n" +
+         "Choose the subjects with the most explanatory potential and the most interest for people who "
+         f"follow tech, crypto and markets. Current pillar weights: {pesos}.\n\n") +
+        f"Stories from the last 5 days:\n{lista}\n\n" +
         ("Subjects of threads already suggested, do not repeat:\n" + "\n".join(f"- {t}" for t in anteriores) + "\n\n"
          if anteriores else "") +
         f"Write {quantas} threads."
     )
-    saida = claude_json(pedido, sistema_thread(), SCHEMA_THREADS) or {}
+    saida = claude_json(pedido, sistema_thread(db), SCHEMA_THREADS) or {}
     threads = []
     for t in saida.get("threads", [])[:quantas]:
-        tweets = [x.strip() for x in t["tweets"] if x.strip()]
-        if len(tweets) < 3:
+        tweets = [sem_travessao(x) for x in t["tweets"] if x.strip()][:8]
+        if len(tweets) < 5:
             continue
         t["tweets"] = tweets
         t["materias"] = [materias[n - 1] for n in t.get("fontes", []) if 0 < n <= len(materias)]
@@ -427,10 +455,11 @@ SCHEMA_CURADORIA = {
                 "type": "object",
                 "properties": {
                     "n": {"type": "integer", "description": "número da notícia na lista"},
-                    "nota": {"type": "integer", "description": "0 a 10: quanto interessa ao investidor brasileiro agora"},
-                    "angulo": {"type": "string", "description": "por que é quente e qual ângulo usar, uma frase"},
+                    "pilar": {"type": "string", "enum": PILARES_IDS},
+                    "nota": {"type": "integer", "description": "0 a 10: quanto rende post forte e seguidor novo agora"},
+                    "angulo": {"type": "string", "description": "a leitura própria do Luís em uma frase, em português"},
                 },
-                "required": ["n", "nota", "angulo"],
+                "required": ["n", "pilar", "nota", "angulo"],
                 "additionalProperties": False,
             },
         },
@@ -439,65 +468,136 @@ SCHEMA_CURADORIA = {
     "additionalProperties": False,
 }
 
-CURADORIA = (
-    "You are the editor choosing which stories become posts on the personal X account of the Head of LATAM "
-    "at BeInCrypto. The goal is followers: Brazilian investors (crypto and stock market) should see the post "
-    "and think 'I need to follow this guy to stay on top of things'. Score each story 0 to 10 for how hot it "
-    "is for a Brazilian investor RIGHT NOW.\n\n"
-    "Hot (7 to 10): big money moving and why (Bitcoin or Ether breaking a level, crash, rally, record, "
-    "billions in liquidations or ETF flows); the big players (BlackRock, Strategy/Saylor, big banks, Musk, "
-    "Trump, the Fed, Nubank, Itaú, XP, BTG, Mercado Pago, B3) making a move; anything that hits the Brazilian "
-    "investor's pocket or decisions (Selic, dollar, Ibovespa, crypto tax and Receita rules, CVM, Banco "
-    "Central, new crypto ETF or product from a big Brazilian institution, Drex, stablecoin rules); hacks, "
-    "frauds, collapses and scandals; giant IPOs and deals; a surprising number people will repeat; a story "
-    "people will argue about.\n"
-    "Boring (0 to 4): exchange marketing, trading campaigns and prize promotions, small product launches, "
-    "minor token partnerships, niche protocols, conferences and events, technical upgrades, price predictions "
-    "for small altcoins, listicles ('3 altcoins para ficar de olho'), interviews with unknown people, "
-    "foreign stories with no Brazilian angle.\n"
-    "Several outlets covering the same event means it is hot; score that event once, on the best source. "
-    "Skip stories already covered in recent drafts. Return only stories scoring 6 or more, best first, with "
-    "the angle in Portuguese."
-)
+
+def sistema_curadoria(db) -> str:
+    from temas import para_prompt
+    return (
+        f"You are the editor of the personal X account of {PERSONA}\n\n"
+        "Read the latest stories and pick the ones that make the best posts for him: the kind that makes "
+        "people who follow tech, crypto and markets think 'I need to follow this guy'.\n\n"
+        f"His content pillars:\n{para_prompt(db)}\n\n"
+        "For each story you pick:\n"
+        "1. pilar: the ONE pillar it fits best. 'pontes' is only for stories that really join the two worlds "
+        "(a big tech moving into crypto, AI applied to finance, investment in Latin American startups). "
+        "'comunicacao' is for PR mistakes, brand crises, reputation turnarounds and how companies tell "
+        "their story, including when a tech or crypto story is above all a communication story.\n"
+        "2. nota 0 to 10, how hot it is right now: 9 or 10 if everyone is talking about it (big names, a "
+        "number that impresses, a controversy, an unexpected turn, a lesson founders and investors want to "
+        "share); 6 to 8 if interesting and current; 5 or less if cold or minor.\n"
+        "3. angulo: his own read in one sentence, from someone who covered the market from inside and now "
+        "works on communication and reputation. Not a summary of the news. No dashes, no semicolons, no "
+        "'não é X, é Y' construction or variations: state it directly.\n\n"
+        "Prefer: big rounds, IPOs and exits, moves by big techs, big banks and big crypto players, "
+        "stablecoins and payments, regulation with real impact, founders with strong stories, AI with real "
+        "business impact, reputation crises and turnarounds, surprising numbers.\n"
+        "Avoid: exchange marketing and trading campaigns, small launches, niche tokens and protocols, price "
+        "predictions for small altcoins, listicles, events and agenda notes, sponsored content, partisan "
+        "politics, daily price moves without a story.\n"
+        "Several outlets covering the same event means it is hot: pick it once, on the best source, even if "
+        "the stories take different angles on it (at most two entries per big event, only if the angles are "
+        "really different). Skip "
+        "stories already covered in recent drafts. Return up to 25 candidates, with every pillar "
+        "represented when the list allows."
+    )
 
 
-def curar(fontes: list[dict], ja_cobertos: list[str]) -> list[tuple[dict, int, str]]:
-    """Uma chamada que ordena as notícias pelo interesse do investidor. Devolve (fonte, nota, ângulo)."""
+def curar(db, fontes: list[dict], ja_cobertos: list[str], tema: str = "") -> list[dict]:
+    """Uma chamada que classifica as notícias por pilar e nota. Devolve dicts com fonte, pilar, nota e angulo."""
     lista = "\n".join(
-        f"[{i}] ({f.get('origem')}, {(f.get('publicado_em') or '')[:16]}) {f['titulo']}: {(f.get('resumo') or '')[:300]}"
+        f"[{i}] ({f.get('origem')}, {(f.get('publicado_em') or '')[:16]}) {f['titulo']}: {(f.get('resumo') or '')[:220]}"
         for i, f in enumerate(fontes, 1)
     )
     cobertos = "\n".join(f"- {t.splitlines()[0][:140]}" for t in ja_cobertos[-25:]) or "- (none)"
-    saida = claude_json(f"Recent drafts:\n{cobertos}\n\nStories:\n{lista}", CURADORIA, SCHEMA_CURADORIA) or {}
+    foco = (f"The account owner asked for posts about \"{tema}\": pick only stories about it.\n\n" if tema else "")
+    saida = claude_json(f"{foco}Recent drafts:\n{cobertos}\n\nStories:\n{lista}",
+                        sistema_curadoria(db), SCHEMA_CURADORIA) or {}
     vistas, ordem = set(), []
     for e in sorted(saida.get("escolhidas", []), key=lambda e: -e["nota"]):
         if 0 < e["n"] <= len(fontes) and e["n"] not in vistas:
             vistas.add(e["n"])
-            ordem.append((fontes[e["n"] - 1], e["nota"], e["angulo"]))
+            ordem.append({"fonte": fontes[e["n"] - 1], "pilar": e["pilar"], "nota": e["nota"], "angulo": e["angulo"]})
     return ordem
+
+
+def ranking(db, candidatos: list[dict], total: int = 10) -> list[dict]:
+    """O top 10 do jeito do LinkedIn, com a fatia de cada pilar proporcional ao peso.
+    Se um pilar não tiver matéria boa, a vaga vai para a melhor das outras."""
+    from temas import cotas, pilares
+    cota = cotas(pilares(db), total)
+    escolhidos = []
+    for pilar, n in cota.items():
+        escolhidos += [c for c in candidatos if c["pilar"] == pilar][:n]
+    sobra = [c for c in candidatos if c not in escolhidos]
+    escolhidos += sobra[:total - len(escolhidos)]
+    return sorted(escolhidos, key=lambda c: -c["nota"])[:total]
+
+
+def fontes_recentes(db, horas: int, so_novas: bool = True) -> list[dict]:
+    from datetime import datetime, timedelta, timezone
+    desde = (datetime.now(timezone.utc) - timedelta(hours=horas)).isoformat()
+    q = db.table("fontes").select("*").gte("publicado_em", desde)
+    if so_novas:
+        q = q.eq("usado", False)
+    return q.order("publicado_em", desc=True).limit(150).execute().data
+
+
+def contexto_recente(db) -> tuple[list[str], list[str]]:
+    """(formatos dos últimos rascunhos, textos dos últimos rascunhos), do mais velho para o mais novo."""
+    linhas = list(reversed(db.table("rascunhos").select("midia_tipo,texto").order("id", desc=True).limit(25).execute().data))
+    return [formato_de(r["midia_tipo"]) for r in linhas[-9:]], [r["texto"] for r in linhas]
+
+
+def pilares_recentes(db) -> list[str]:
+    linha = db.table("bot_estado").select("valor").eq("chave", "pilares:recentes").execute().data
+    return json.loads(linha[0]["valor"]) if linha else []
+
+
+def lembrar_pilar(db, pilar: str):
+    lista = (pilares_recentes(db) + [pilar])[-20:]
+    db.table("bot_estado").upsert({"chave": "pilares:recentes", "valor": json.dumps(lista)}).execute()
+
+
+def escrever(db, fonte: dict, angulo: str, pilar: str, recentes: list[str], ja_cobertos: list[str]) -> int | None:
+    """Escreve o rascunho de uma matéria e salva como pendente. Devolve o id ou None."""
+    formato = proximo_formato(recentes)
+    try:
+        saida = gerar_um(fonte, formato, ja_cobertos, angulo, pilar)
+    except (RuntimeError, subprocess.TimeoutExpired, json.JSONDecodeError) as e:
+        print(f"[gerador] erro em {fonte['url']}: {e}")
+        return None
+    # Marca como usada mesmo se descartada, para não gastar chamadas de novo.
+    db.table("fontes").update({"usado": True}).eq("id", fonte["id"]).execute()
+    if not saida or not saida["publicar"]:
+        print(f"[gerador] pulado ({saida and saida['motivo']}): {fonte['titulo']}")
+        return None
+    tweet = sem_travessao(saida["tweet"])
+    if len(tweet) > LIMITE_TWEET:
+        print(f"[gerador] tweet com {len(tweet)} caracteres, descartado: {fonte['titulo']}")
+        return None
+    midia_tipo, midia_urls = resolver_midia(fonte, formato, saida)
+    recentes.append(formato_de(midia_tipo))
+    ja_cobertos.append(tweet)
+    linha = db.table("rascunhos").insert({
+        "fonte_id": fonte["id"], "texto": tweet, "link": fonte["url"], "status": "pendente",
+        "midia_tipo": midia_tipo, "midia_urls": midia_urls,
+    }).execute().data
+    if pilar:
+        lembrar_pilar(db, pilar)
+    print(f"[gerador] rascunho salvo ({pilar}, {midia_tipo or 'sem mídia'}): {tweet[:80]}…")
+    return linha[0]["id"] if linha else None
 
 
 def main():
     db = supabase()
     from datetime import datetime, timedelta, timezone
+    from temas import mais_atrasado, pilares
     # Só o que saiu nas últimas 36 h: notícia velha não é quente.
-    desde = (datetime.now(timezone.utc) - timedelta(hours=36)).isoformat()
-    fontes = (
-        db.table("fontes").select("*").eq("usado", False).gte("publicado_em", desde)
-        .order("publicado_em", desc=True).limit(80).execute().data
-    )
+    fontes = fontes_recentes(db, 36)
     if not fontes:
         print("[gerador] nenhuma fonte nova")
         return
 
-    recentes = [
-        formato_de(r["midia_tipo"]) for r in
-        reversed(db.table("rascunhos").select("midia_tipo").order("id", desc=True).limit(9).execute().data)
-    ]
-    ja_cobertos = [
-        r["texto"] for r in
-        reversed(db.table("rascunhos").select("texto").order("id", desc=True).limit(25).execute().data)
-    ]
+    recentes, ja_cobertos = contexto_recente(db)
     inicio = datetime.now(timezone(timedelta(hours=-3))).replace(hour=0, minute=0, second=0, microsecond=0)
     hoje = db.table("rascunhos").select("id").not_.is_("fonte_id", "null").gte("criado_em", inicio.isoformat()).execute().data
     pedido = db.table("bot_estado").select("valor").eq("chave", "gerar:pedido").execute().data
@@ -519,52 +619,27 @@ def main():
             print(f"[gerador] já são {len(hoje)} rascunhos de notícia hoje (limite {POR_DIA})")
             return
     try:
-        escolhidas = curar(fontes, ja_cobertos)
+        candidatos = curar(db, fontes, ja_cobertos)
     except (RuntimeError, subprocess.TimeoutExpired, json.JSONDecodeError) as e:
-        print(f"[gerador] curadoria falhou ({e}); sigo pela ordem das mais novas")
-        escolhidas = [(f, 0, "") for f in fontes[:MAX_TENTATIVAS]]
+        print(f"[gerador] curadoria falhou ({e}); nada gerado nesta rodada")
+        return
     # Automático só gera do que é quente de verdade (7+); pedido seu aceita a partir de 6.
     corte = 6 if manual else 7
-    escolhidas = [e for e in escolhidas if e[1] >= corte or not e[2]][:MAX_TENTATIVAS]
-    for f, nota, angulo in escolhidas:
-        print(f"[gerador] nota {nota}: {f['titulo'][:90]} | {angulo}")
-    if not escolhidas:
-        print("[gerador] nada quente para investidor agora")
+    candidatos = [c for c in candidatos if c["nota"] >= corte]
+    for c in candidatos:
+        print(f"[gerador] {c['pilar']} nota {c['nota']}: {c['fonte']['titulo'][:80]} | {c['angulo']}")
+    if not candidatos:
+        print("[gerador] nada quente agora")
+        return
+    # O pilar mais abaixo do peso nos últimos rascunhos vai primeiro; dentro dele, a maior nota.
+    ordem = mais_atrasado(pilares(db), pilares_recentes(db))
+    fila = sorted(candidatos, key=lambda c: (ordem.index(c["pilar"]) if c["pilar"] in ordem else 99, -c["nota"]))
     criados = 0
-    for fonte, nota, angulo in escolhidas:
+    for c in fila[:MAX_TENTATIVAS]:
         if criados >= por_execucao:
             break
-        formato = proximo_formato(recentes)
-        try:
-            saida = gerar_um(fonte, formato, ja_cobertos, angulo)
-        except (RuntimeError, subprocess.TimeoutExpired, json.JSONDecodeError) as e:
-            print(f"[gerador] erro em {fonte['url']}: {e}")
-            continue
-
-        # Marca como usada mesmo se descartada, para não gastar chamadas de novo.
-        db.table("fontes").update({"usado": True}).eq("id", fonte["id"]).execute()
-
-        if not saida or not saida["publicar"]:
-            print(f"[gerador] pulado ({saida and saida['motivo']}): {fonte['titulo']}")
-            continue
-        tweet = saida["tweet"].strip()
-        if len(tweet) > LIMITE_TWEET:
-            print(f"[gerador] tweet com {len(tweet)} caracteres, descartado: {fonte['titulo']}")
-            continue
-
-        midia_tipo, midia_urls = resolver_midia(fonte, formato, saida)
-        recentes.append(formato_de(midia_tipo))
-        ja_cobertos.append(tweet)
-        criados += 1
-        db.table("rascunhos").insert({
-            "fonte_id": fonte["id"],
-            "texto": tweet,
-            "link": fonte["url"],
-            "status": "pendente",
-            "midia_tipo": midia_tipo,
-            "midia_urls": midia_urls,
-        }).execute()
-        print(f"[gerador] rascunho salvo ({midia_tipo or 'sem mídia'}): {tweet[:80]}…")
+        if escrever(db, c["fonte"], c["angulo"], c["pilar"], recentes, ja_cobertos):
+            criados += 1
 
 
 if __name__ == "__main__":

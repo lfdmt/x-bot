@@ -181,11 +181,14 @@ def salvar_offset(db, offset: int):
 
 AVISO_PEDIDO = "⏳ Recebi o link. As 3 opções de resposta chegam aqui em alguns minutos."
 AJUDA = ("Comandos:\n"
-         "• /gerar: busca notícias e gera rascunhos agora\n"
-         "• /investidor: 3 rascunhos das notícias mais quentes para investidor agora\n"
+         "• /post: ranking das 10 melhores matérias para post, com nota e pilar. Toque no número e eu escrevo"
+         ". /post seguido de um tema foca nele\n"
+         "• /temas: mostra os pilares e os pesos. /temas cripto 30 muda um peso; /temas padrao volta ao temas.json\n"
+         "• /gerar: gera rascunhos agora, seguindo os pesos dos pilares\n"
+         "• /investidor: 3 rascunhos das matérias mais quentes agora\n"
          "• /viral: 3 comentários seus sobre notícias do dia (política, geopolítica, mercado, inovação)"
          ". /viral seguido de um tema foca nele\n"
-         "• /thread: 2 threads explicativas com seu olhar de editor, a partir das matérias do BeInCrypto da semana"
+         "• /thread: 2 threads explicativas (5 a 8 tweets) a partir das matérias dos seus pilares"
          ". /thread seguido de um tema foca nele\n"
          "• /atualidades: assuntos do momento no Brasil, para tweetar sobre eles\n"
          "• /respostas: abre seu feed no X; mande o link do post que quer responder\n"
@@ -237,6 +240,22 @@ def tratar_clique(db, cq: dict):
         disparar("respostas.yml")
         tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Escrevendo")
         confirmar(msg["message_id"], f"⏳ Escrevendo sobre \"{escolhido['name']}\". O rascunho chega em 2 a 3 minutos.")
+        return
+    if acao == "rank":
+        lista = db.table("bot_estado").select("valor").eq("chave", f"ranking:{msg['message_id']}").execute().data
+        itens = json.loads(lista[0]["valor"]) if lista else []
+        i = int(rid)
+        if i >= len(itens):
+            tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Ranking antigo, mande /post de novo")
+            return
+        if repetido_assunto(db, msg["message_id"], i):
+            tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Já estou escrevendo esse")
+            return
+        db.table("bot_estado").upsert({"chave": f"pedido_rank:{msg['message_id']}:{i}",
+                                       "valor": json.dumps(itens[i], ensure_ascii=False)}).execute()
+        disparar("respostas.yml")
+        tg("answerCallbackQuery", silencioso=True, callback_query_id=cq["id"], text="Escrevendo")
+        confirmar(msg["message_id"], f"⏳ Escrevendo o {i + 1}. O rascunho chega em 2 a 3 minutos.")
         return
     if acao == "outras":
         from respostas import registrar_pedido
@@ -366,12 +385,29 @@ def tratar_atualizacao(db, u: dict):
             tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
                text="⏳ Escrevendo 3 tweets do dia a dia" + (f" sobre {tema}" if tema else "") +
                ". Chegam aqui em 2 a 3 minutos.")
+        elif texto.lower().startswith("/temas"):
+            import temas
+            partes = texto.split()[1:]
+            if partes and partes[0].lower() in ("padrao", "padrão"):
+                resposta = temas.padrao(db)
+            elif len(partes) >= 2 and partes[-1].rstrip("%").isdigit():
+                resposta = temas.ajustar(db, " ".join(partes[:-1]), int(partes[-1].rstrip("%")))
+            else:
+                resposta = temas.texto_temas(db)
+            tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"], text=resposta)
+        elif texto.lower().startswith("/post"):
+            tema = texto[len("/post"):].strip()
+            db.table("bot_estado").upsert({"chave": f"pedido_post:{msg['message_id']}", "valor": tema}).execute()
+            disparar("respostas.yml")
+            tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
+               text="⏳ Lendo as matérias das últimas 48 h e montando o ranking" +
+               (f" sobre {tema}" if tema else "") + ". Chega aqui em 2 a 3 minutos.")
         elif texto.lower().startswith("/thread"):
             tema = texto[len("/thread"):].strip()
             db.table("bot_estado").upsert({"chave": f"pedido_thread:{msg['message_id']}", "valor": tema}).execute()
             disparar("respostas.yml")
             tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
-               text="⏳ Lendo as matérias do BeInCrypto da semana e montando 2 threads" +
+               text="⏳ Lendo as matérias dos últimos dias e montando 2 threads" +
                (f" sobre {tema}" if tema else "") + ". Chegam aqui em 3 a 5 minutos.")
         elif texto.lower().startswith("/seguir"):
             from seguir import buscar, sugerir
@@ -393,7 +429,7 @@ def tratar_atualizacao(db, u: dict):
                                            {"chave": "gerar:quantos", "valor": "3"}]).execute()
             disparar("coletar-gerar.yml")
             tg("sendMessage", chat_id=CHAT_ID, reply_to_message_id=msg["message_id"],
-               text="🔥 Procurando as notícias mais quentes para investidor agora. Até 3 rascunhos chegam em alguns minutos.")
+               text="🔥 Procurando as matérias mais quentes agora, seguindo os pesos dos pilares. Até 3 rascunhos chegam em alguns minutos.")
         elif texto.lower().startswith("/gerar"):
             # Pedido seu: gera mesmo fora do horário e acima do limite diário.
             db.table("bot_estado").upsert({"chave": "gerar:pedido",
@@ -454,9 +490,11 @@ def enviar_pendentes(db):
 # `python telegram_bot.py --menu` uma vez.
 MENU = [
     ("viral", "3 comentários sobre notícias do dia. /viral tema foca num assunto"),
-    ("thread", "2 threads explicativas das matérias do BeInCrypto. /thread tema foca num assunto"),
-    ("investidor", "3 rascunhos das notícias mais quentes para investidor"),
-    ("gerar", "Busca notícias e gera rascunhos agora"),
+    ("post", "Ranking das 10 melhores matérias para post. /post tema foca num assunto"),
+    ("thread", "2 threads explicativas de 5 a 8 tweets. /thread tema foca num assunto"),
+    ("temas", "Ver e ajustar os pesos dos pilares"),
+    ("investidor", "3 rascunhos das matérias mais quentes agora"),
+    ("gerar", "Gera rascunhos agora, seguindo os pesos dos pilares"),
     ("atualidades", "Assuntos do momento no Brasil"),
     ("respostas", "Abrir meu feed para escolher o que responder"),
     ("seguir", "5 contas para seguir, com chance de seguirem de volta"),
